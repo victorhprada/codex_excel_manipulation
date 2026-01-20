@@ -1,43 +1,30 @@
-# Excel Filter Helper
+# Gerador de Relatórios Excel
 
-Aplicacao simples em Python com Streamlit para receber um arquivo Excel (.xlsx) e gerar outro arquivo com todas as abas originais, alem de duas abas filtradas a partir de **Detalhado**.
+## Por que essa ferramenta existe?
 
-## Requisitos
+O time precisa preparar relatórios em Excel para clientes com ajustes específicos e
+regras de negócio claras. Fazer isso manualmente consome tempo, aumenta o risco de
+erros e gera retrabalho. Esta aplicação automatiza esse processo, garantindo
+consistência e padronização no resultado final.
 
-- Python 3.10+
-- pandas
-- openpyxl
-- streamlit
+## O que a ferramenta faz
 
-Instale dependencias:
+- Recebe um arquivo Excel com as abas padrão do relatório.
+- Mantém todas as abas originais.
+- Cria as abas **Custo empresa** e **Desconto folha** com base nas regras de separação.
+- Remove linhas não relevantes da aba **Overview**.
+- Entrega um arquivo final pronto para envio ao cliente.
 
-```bash
-pip install -r requirements.txt
-```
+## Como usar
 
-## Uso
+1. Acesse a aplicação no navegador.
+2. Faça upload do Excel original.
+3. Clique em **Processar arquivo**.
+4. Baixe o Excel final gerado.
 
-```bash
-streamlit run app.py
-```
+## Benefícios para o time
 
-## Regras implementadas
-
-- Mantem todas as abas originais exatamente como estao.
-- Cria as abas adicionais:
-  - **Custo empresa**: linhas em que `ESTABELECIMENTO` == `TARIFA RESGATE LIMITE PARA FLEX`
-    e linhas em que `ESTABELECIMENTO` == `RESGATE LIMITE PARA FLEX` com **CHECKOUT** preenchido
-  - **Desconto folha**: linhas em que `ESTABELECIMENTO` == `RESGATE LIMITE PARA FLEX`
-    e **CHECKOUT** vazio ou nulo
-- Ambas mantem a mesma estrutura de colunas da aba **Detalhado**.
-- O arquivo final e disponibilizado para download com o nome **relatorio_processado.xlsx**.
-- Registros com **CHECKOUT** preenchido na aba **Detalhado** sao sempre
-  classificados como **Custo empresa** e removidos de **Desconto folha**.
-- A aba **Custo empresa** e organizada com blocos visuais para separar registros sem
-  checkout e registros com checkout (empresa e folha) ao final da tabela.
-
-## Observacoes
-
-- O arquivo de entrada deve conter a aba **Detalhado**.
-- A coluna **ESTABELECIMENTO** precisa existir na aba **Detalhado**.
-- A coluna **CHECKOUT** precisa existir na aba **Detalhado**.
+- Reduz tempo de preparação dos relatórios.
+- Evita inconsistências e ajustes manuais.
+- Garante que o arquivo final siga o padrão esperado.
+- Facilita revisões e entrega ao cliente.
