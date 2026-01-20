@@ -17,6 +17,8 @@ COST_FILTER_VALUE = "TARIFA RESGATE LIMITE PARA FLEX"
 DISCOUNT_FILTER_VALUE = "RESGATE LIMITE PARA FLEX"
 OVERVIEW_SHEET_NAME = "Overview"
 OVERVIEW_FILTER_VALUES = {"Taxa administrativa", "Subsídios"}
+OVERVIEW_SECTION_LABEL = "PARTE DA EMPRESA"
+OVERVIEW_TOTAL_LABEL = "TOTAL DA EMPRESA"
 
 
 def process_excel(uploaded_file: BytesIO) -> BytesIO:
@@ -92,6 +94,27 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
         }
         for row_idx in sorted(rows_to_remove, reverse=True):
             overview_sheet.delete_rows(row_idx)
+
+        total_row = None
+        total_col = None
+        section_row = None
+        for row in overview_sheet.iter_rows():
+            for cell in row:
+                if cell.value == OVERVIEW_TOTAL_LABEL:
+                    total_row = cell.row
+                    for right_cell in overview_sheet[cell.row]:
+                        if right_cell.column > cell.column and right_cell.value not in (None, ""):
+                            total_col = right_cell.column
+                            break
+                if cell.value == OVERVIEW_SECTION_LABEL:
+                    section_row = cell.row
+
+        if total_row and total_col and section_row and section_row < total_row:
+            start_row = section_row + 1
+            end_row = total_row - 1
+            column_letter = overview_sheet.cell(row=total_row, column=total_col).column_letter
+            formula_cell = overview_sheet.cell(row=total_row, column=total_col)
+            formula_cell.value = f"=SUM({column_letter}{start_row}:{column_letter}{end_row})"
 
     for sheet_name in (COST_SHEET_NAME, DISCOUNT_SHEET_NAME):
         if sheet_name in workbook.sheetnames:
