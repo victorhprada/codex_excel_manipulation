@@ -55,4 +55,3 @@ A partir de um **único upload de Excel**, a aplicação gera um novo arquivo:
 - Mantém o nome original do arquivo
 - Adiciona o prefixo:
   - `processado_`
-- Exemplo:
