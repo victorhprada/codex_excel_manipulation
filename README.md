@@ -29,8 +29,11 @@ streamlit run app.py
   - **Desconto folha**: linhas em que `Estabelecimento` == `RESGATE LIMITE PARA FLEX`
 - Ambas mantem a mesma estrutura de colunas da aba **Detalhado**.
 - O arquivo final e disponibilizado para download com o nome **relatorio_processado.xlsx**.
+- Registros com **CHECKOUT** preenchido na aba **Compilado por funcionario** sao sempre
+  classificados como **Custo empresa** e removidos de **Desconto folha**.
 
 ## Observacoes
 
 - O arquivo de entrada deve conter a aba **Detalhado**.
 - A coluna **Estabelecimento** precisa existir na aba **Detalhado**.
+- A coluna **CHECKOUT** precisa existir na aba **Compilado por funcionario**.
