@@ -25,15 +25,17 @@ streamlit run app.py
 
 - Mantem todas as abas originais exatamente como estao.
 - Cria as abas adicionais:
-  - **Custo empresa**: linhas em que `Estabelecimento` == `TARIFA RESGATE LIMITE PARA FLEX`
-  - **Desconto folha**: linhas em que `Estabelecimento` == `RESGATE LIMITE PARA FLEX`
+  - **Custo empresa**: linhas em que `ESTABELECIMENTO` == `TARIFA RESGATE LIMITE PARA FLEX`
+    e linhas em que `ESTABELECIMENTO` == `RESGATE LIMITE PARA FLEX` com **CHECKOUT** preenchido
+  - **Desconto folha**: linhas em que `ESTABELECIMENTO` == `RESGATE LIMITE PARA FLEX`
+    e **CHECKOUT** vazio ou nulo
 - Ambas mantem a mesma estrutura de colunas da aba **Detalhado**.
 - O arquivo final e disponibilizado para download com o nome **relatorio_processado.xlsx**.
-- Registros com **CHECKOUT** preenchido na aba **Compilado por funcionario** sao sempre
+- Registros com **CHECKOUT** preenchido na aba **Detalhado** sao sempre
   classificados como **Custo empresa** e removidos de **Desconto folha**.
 
 ## Observacoes
 
 - O arquivo de entrada deve conter a aba **Detalhado**.
-- A coluna **Estabelecimento** precisa existir na aba **Detalhado**.
-- A coluna **CHECKOUT** precisa existir na aba **Compilado por funcionario**.
+- A coluna **ESTABELECIMENTO** precisa existir na aba **Detalhado**.
+- A coluna **CHECKOUT** precisa existir na aba **Detalhado**.
