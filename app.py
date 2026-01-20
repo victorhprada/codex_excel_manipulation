@@ -15,7 +15,6 @@ COST_SHEET_NAME = "Custo empresa"
 DISCOUNT_SHEET_NAME = "Desconto folha"
 COST_FILTER_VALUE = "TARIFA RESGATE LIMITE PARA FLEX"
 DISCOUNT_FILTER_VALUE = "RESGATE LIMITE PARA FLEX"
-OUTPUT_FILENAME = "relatorio_processado.xlsx"
 OVERVIEW_SHEET_NAME = "Overview"
 OVERVIEW_FILTER_VALUES = {"Taxa administrativa", "Subsídios"}
 
@@ -138,11 +137,12 @@ def main() -> None:
             st.error(f"Erro inesperado ao processar o arquivo: {exc}")
             return
 
+        output_filename = f"processado_{uploaded_file.name}"
         st.success("Arquivo processado com sucesso.")
         st.download_button(
             label="Baixar arquivo processado",
             data=output_buffer,
-            file_name=OUTPUT_FILENAME,
+            file_name=output_filename,
             mime=(
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             ),
