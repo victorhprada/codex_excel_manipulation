@@ -1,22 +1,19 @@
-from __future__ import annotations
-
-from io import BytesIO
+import argparse
+from pathlib import Path
 
 import pandas as pd
-import streamlit as st
 
 
-SOURCE_SHEET_NAME = "Detalhado"
-COLUMN_ESTABELECIMENTO = "Estabelecimento"
 COST_SHEET_NAME = "Custo empresa"
 DISCOUNT_SHEET_NAME = "Desconto folha"
+SOURCE_SHEET_NAME = "Detalhado"
+COLUMN_ESTABELECIMENTO = "Estabelecimento"
 COST_FILTER_VALUE = "TARIFA RESGATE LIMITE PARA FLEX"
 DISCOUNT_FILTER_VALUE = "RESGATE LIMITE PARA FLEX"
-OUTPUT_FILENAME = "relatorio_processado.xlsx"
 
 
-def build_output_excel(uploaded_file: BytesIO) -> BytesIO:
-    excel_file = pd.ExcelFile(uploaded_file)
+def build_output_excel(input_path: Path, output_path: Path) -> None:
+    excel_file = pd.ExcelFile(input_path)
 
     if SOURCE_SHEET_NAME not in excel_file.sheet_names:
         available = ", ".join(excel_file.sheet_names)
@@ -24,70 +21,42 @@ def build_output_excel(uploaded_file: BytesIO) -> BytesIO:
             f"A aba '{SOURCE_SHEET_NAME}' nao foi encontrada. Disponiveis: {available}"
         )
 
-    # Lemos a aba base para aplicar os filtros das novas abas.
-    detailed_frame = pd.read_excel(excel_file, sheet_name=SOURCE_SHEET_NAME)
-    if COLUMN_ESTABELECIMENTO not in detailed_frame.columns:
-        raise ValueError(
-            f"A coluna '{COLUMN_ESTABELECIMENTO}' nao existe na aba '{SOURCE_SHEET_NAME}'."
-        )
-
-    # Aplicamos os filtros solicitados, mantendo a mesma estrutura de colunas.
-    cost_frame = detailed_frame[
-        detailed_frame[COLUMN_ESTABELECIMENTO] == COST_FILTER_VALUE
-    ]
-    discount_frame = detailed_frame[
-        detailed_frame[COLUMN_ESTABELECIMENTO] == DISCOUNT_FILTER_VALUE
-    ]
-
-    # Gravamos todas as abas originais e adicionamos as novas abas filtradas.
-    output_buffer = BytesIO()
-    with pd.ExcelWriter(output_buffer, engine="openpyxl") as writer:
+    with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
         for sheet_name in excel_file.sheet_names:
             frame = pd.read_excel(excel_file, sheet_name=sheet_name)
             frame.to_excel(writer, sheet_name=sheet_name, index=False)
 
+        detailed_frame = pd.read_excel(excel_file, sheet_name=SOURCE_SHEET_NAME)
+        if COLUMN_ESTABELECIMENTO not in detailed_frame.columns:
+            raise ValueError(
+                f"A coluna '{COLUMN_ESTABELECIMENTO}' nao existe na aba '{SOURCE_SHEET_NAME}'."
+            )
+
+        cost_frame = detailed_frame[
+            detailed_frame[COLUMN_ESTABELECIMENTO] == COST_FILTER_VALUE
+        ]
+        discount_frame = detailed_frame[
+            detailed_frame[COLUMN_ESTABELECIMENTO] == DISCOUNT_FILTER_VALUE
+        ]
+
         cost_frame.to_excel(writer, sheet_name=COST_SHEET_NAME, index=False)
         discount_frame.to_excel(writer, sheet_name=DISCOUNT_SHEET_NAME, index=False)
 
-    output_buffer.seek(0)
-    return output_buffer
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Gera um novo arquivo Excel com as abas originais e duas abas filtradas."
+        )
+    )
+    parser.add_argument("input", type=Path, help="Caminho do arquivo Excel de entrada")
+    parser.add_argument("output", type=Path, help="Caminho do arquivo Excel de saida")
+    return parser.parse_args()
 
 
 def main() -> None:
-    st.title("Gerador de Relatorio Excel")
-    st.write(
-        "Envie um arquivo Excel (.xlsx) com as abas originais e gere um novo arquivo "
-        "com as abas adicionais 'Custo empresa' e 'Desconto folha'."
-    )
-
-    uploaded_file = st.file_uploader(
-        "Selecione o arquivo Excel (.xlsx)",
-        type=["xlsx"],
-    )
-
-    if uploaded_file is None:
-        st.info("Aguardando o upload do arquivo Excel.")
-        return
-
-    if st.button("Processar arquivo"):
-        try:
-            output_buffer = build_output_excel(uploaded_file)
-        except ValueError as exc:
-            st.error(str(exc))
-            return
-        except Exception as exc:  # noqa: BLE001
-            st.error(f"Erro inesperado ao processar o arquivo: {exc}")
-            return
-
-        st.success("Arquivo processado com sucesso.")
-        st.download_button(
-            label="Baixar arquivo processado",
-            data=output_buffer,
-            file_name=OUTPUT_FILENAME,
-            mime=(
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            ),
-        )
+    args = parse_args()
+    build_output_excel(args.input, args.output)
 
 
 if __name__ == "__main__":
