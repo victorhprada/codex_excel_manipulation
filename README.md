@@ -33,6 +33,8 @@ streamlit run app.py
 - O arquivo final e disponibilizado para download com o nome **relatorio_processado.xlsx**.
 - Registros com **CHECKOUT** preenchido na aba **Detalhado** sao sempre
   classificados como **Custo empresa** e removidos de **Desconto folha**.
+- A aba **Custo empresa** e organizada com blocos visuais para separar registros sem
+  checkout e registros com checkout (empresa e folha) ao final da tabela.
 
 ## Observacoes
 

@@ -43,17 +43,39 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
     )
 
     # Aplicamos os filtros solicitados, mantendo a mesma estrutura de colunas.
-    cost_frame = detailed_frame[
+    cost_no_checkout = detailed_frame[
         (detailed_frame[COLUMN_ESTABELECIMENTO] == COST_FILTER_VALUE)
-        | (
-            (detailed_frame[COLUMN_ESTABELECIMENTO] == DISCOUNT_FILTER_VALUE)
-            & checkout_filled
-        )
+        & ~checkout_filled
+    ]
+    cost_checkout_empresa = detailed_frame[
+        (detailed_frame[COLUMN_ESTABELECIMENTO] == COST_FILTER_VALUE) & checkout_filled
+    ]
+    cost_checkout_folha = detailed_frame[
+        (detailed_frame[COLUMN_ESTABELECIMENTO] == DISCOUNT_FILTER_VALUE)
+        & checkout_filled
     ]
     discount_frame = detailed_frame[
         (detailed_frame[COLUMN_ESTABELECIMENTO] == DISCOUNT_FILTER_VALUE)
         & ~checkout_filled
     ]
+
+    title_empresa = pd.DataFrame([{detailed_frame.columns[0]: "Checkouts Empresa"}])
+    title_folha = pd.DataFrame(
+        [{detailed_frame.columns[0]: "Checkouts Folha colab"}]
+    )
+    title_empresa = title_empresa.reindex(columns=detailed_frame.columns, fill_value="")
+    title_folha = title_folha.reindex(columns=detailed_frame.columns, fill_value="")
+
+    cost_frame = pd.concat(
+        [
+            cost_no_checkout,
+            title_empresa,
+            cost_checkout_empresa,
+            title_folha,
+            cost_checkout_folha,
+        ],
+        ignore_index=True,
+    )
 
     # Gravamos todas as abas originais e adicionamos as novas abas filtradas.
     output_buffer = BytesIO()
