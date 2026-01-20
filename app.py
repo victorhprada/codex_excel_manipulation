@@ -14,6 +14,8 @@ DISCOUNT_SHEET_NAME = "Desconto folha"
 COST_FILTER_VALUE = "TARIFA RESGATE LIMITE PARA FLEX"
 DISCOUNT_FILTER_VALUE = "RESGATE LIMITE PARA FLEX"
 OUTPUT_FILENAME = "relatorio_processado.xlsx"
+OVERVIEW_SHEET_NAME = "Overview"
+OVERVIEW_FILTER_VALUES = {"Taxa administrativa", "Subsídios"}
 
 
 def process_excel(uploaded_file: BytesIO) -> BytesIO:
@@ -82,6 +84,9 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
     with pd.ExcelWriter(output_buffer, engine="openpyxl") as writer:
         for sheet_name in excel_file.sheet_names:
             frame = pd.read_excel(excel_file, sheet_name=sheet_name)
+            if sheet_name == OVERVIEW_SHEET_NAME and not frame.empty:
+                first_column = frame.columns[0]
+                frame = frame[~frame[first_column].isin(OVERVIEW_FILTER_VALUES)]
             frame.to_excel(writer, sheet_name=sheet_name, index=False)
 
         cost_frame.to_excel(writer, sheet_name=COST_SHEET_NAME, index=False)
