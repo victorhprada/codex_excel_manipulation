@@ -4,6 +4,8 @@ from io import BytesIO
 
 import pandas as pd
 import streamlit as st
+from openpyxl import load_workbook
+from openpyxl.utils.dataframe import dataframe_to_rows
 
 
 CENTER_SHEET_NAME = "Detalhado"
@@ -19,7 +21,8 @@ OVERVIEW_FILTER_VALUES = {"Taxa administrativa", "Subsídios"}
 
 
 def process_excel(uploaded_file: BytesIO) -> BytesIO:
-    excel_file = pd.ExcelFile(uploaded_file)
+    bytes_data = uploaded_file.getvalue()
+    excel_file = pd.ExcelFile(BytesIO(bytes_data))
 
     if CENTER_SHEET_NAME not in excel_file.sheet_names:
         available = ", ".join(excel_file.sheet_names)
@@ -79,19 +82,32 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
         ignore_index=True,
     )
 
-    # Gravamos todas as abas originais e adicionamos as novas abas filtradas.
+    workbook = load_workbook(BytesIO(bytes_data))
+    if OVERVIEW_SHEET_NAME in workbook.sheetnames:
+        overview_sheet = workbook[OVERVIEW_SHEET_NAME]
+        rows_to_remove = {
+            cell.row
+            for row in overview_sheet.iter_rows()
+            for cell in row
+            if cell.value in OVERVIEW_FILTER_VALUES
+        }
+        for row_idx in sorted(rows_to_remove, reverse=True):
+            overview_sheet.delete_rows(row_idx)
+
+    for sheet_name in (COST_SHEET_NAME, DISCOUNT_SHEET_NAME):
+        if sheet_name in workbook.sheetnames:
+            del workbook[sheet_name]
+
+    cost_sheet = workbook.create_sheet(COST_SHEET_NAME)
+    for row in dataframe_to_rows(cost_frame, index=False, header=True):
+        cost_sheet.append(row)
+
+    discount_sheet = workbook.create_sheet(DISCOUNT_SHEET_NAME)
+    for row in dataframe_to_rows(discount_frame, index=False, header=True):
+        discount_sheet.append(row)
+
     output_buffer = BytesIO()
-    with pd.ExcelWriter(output_buffer, engine="openpyxl") as writer:
-        for sheet_name in excel_file.sheet_names:
-            frame = pd.read_excel(excel_file, sheet_name=sheet_name)
-            if sheet_name == OVERVIEW_SHEET_NAME and not frame.empty:
-                first_column = frame.columns[0]
-                frame = frame[~frame[first_column].isin(OVERVIEW_FILTER_VALUES)]
-            frame.to_excel(writer, sheet_name=sheet_name, index=False)
-
-        cost_frame.to_excel(writer, sheet_name=COST_SHEET_NAME, index=False)
-        discount_frame.to_excel(writer, sheet_name=DISCOUNT_SHEET_NAME, index=False)
-
+    workbook.save(output_buffer)
     output_buffer.seek(0)
     return output_buffer
 
