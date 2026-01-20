@@ -1,12 +1,13 @@
 # Excel Filter Helper
 
-Aplicacao simples em Python para receber um arquivo Excel (.xlsx) e gerar outro arquivo com todas as abas originais, alem de duas abas filtradas a partir de **Detalhado**.
+Aplicacao simples em Python com Streamlit para receber um arquivo Excel (.xlsx) e gerar outro arquivo com todas as abas originais, alem de duas abas filtradas a partir de **Detalhado**.
 
 ## Requisitos
 
 - Python 3.10+
 - pandas
 - openpyxl
+- streamlit
 
 Instale dependencias:
 
@@ -17,7 +18,7 @@ pip install -r requirements.txt
 ## Uso
 
 ```bash
-python app.py caminho/entrada.xlsx caminho/saida.xlsx
+streamlit run app.py
 ```
 
 ## Regras implementadas
@@ -27,6 +28,7 @@ python app.py caminho/entrada.xlsx caminho/saida.xlsx
   - **Custo empresa**: linhas em que `Estabelecimento` == `TARIFA RESGATE LIMITE PARA FLEX`
   - **Desconto folha**: linhas em que `Estabelecimento` == `RESGATE LIMITE PARA FLEX`
 - Ambas mantem a mesma estrutura de colunas da aba **Detalhado**.
+- O arquivo final e disponibilizado para download com o nome **relatorio_processado.xlsx**.
 
 ## Observacoes
 
