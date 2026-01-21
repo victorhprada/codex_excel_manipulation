@@ -26,10 +26,6 @@ OVERVIEW_CUSTO_EMPRESA_LABEL = "Custo empresa (Taxa tarifas)"
 OVERVIEW_A_DEBITAR_LABEL = "A debitar em folha"
 OVERVIEW_TOTAL_FUNC_LABEL = "TOTAL DO FUNCIONÁRIO"
 OVERVIEW_TOTAL_FECHAMENTO_LABEL = "TOTAL DO FECHAMENTO"
-HEADER_ESTABELECIMENTO = "ESTABELECIMENTO"
-HEADER_CHECKOUT = "CHECKOUT"
-HEADER_DEBITO = "DEBITO EM FOLHA"
-HEADER_DEBITO_ACCENT = "DÉBITO EM FOLHA"
 
 
 def normalize_text(value: object) -> str:
@@ -54,14 +50,6 @@ def find_value_cell(sheet, label_cell):
     for cell in sheet[label_cell.row]:
         if cell.column > label_cell.column and cell.value not in (None, ""):
             return cell
-    return None
-
-
-def find_header_column(sheet, labels: set[str]) -> str | None:
-    normalized = {normalize_text(label) for label in labels}
-    for cell in sheet[1]:
-        if normalize_text(cell.value) in normalized:
-            return cell.column_letter
     return None
 
 
@@ -179,50 +167,7 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
     for row in dataframe_to_rows(discount_frame, index=False, header=True):
         discount_sheet.append(row)
 
-    cost_debito_col = find_header_column(
-        cost_sheet, {HEADER_DEBITO, HEADER_DEBITO_ACCENT}
-    )
-    cost_estabelecimento_col = find_header_column(
-        cost_sheet, {HEADER_ESTABELECIMENTO}
-    )
-    cost_checkout_col = find_header_column(cost_sheet, {HEADER_CHECKOUT})
-    discount_debito_col = find_header_column(
-        discount_sheet, {HEADER_DEBITO, HEADER_DEBITO_ACCENT}
-    )
-
-    if (
-        cost_debito_col
-        and cost_estabelecimento_col
-        and cost_checkout_col
-        and discount_debito_col
-        and OVERVIEW_SHEET_NAME in workbook.sheetnames
-    ):
-        overview_sheet = workbook[OVERVIEW_SHEET_NAME]
-        if checkout_folha_cell:
-            value_cell = find_value_cell(overview_sheet, checkout_folha_cell)
-            if value_cell:
-                value_cell.value = (
-                    f"=SUMIFS('Custo empresa'!{cost_debito_col}:{cost_debito_col},"
-                    f"'Custo empresa'!{cost_estabelecimento_col}:{cost_estabelecimento_col},"
-                    f"\"{DISCOUNT_FILTER_VALUE}\","
-                    f"'Custo empresa'!{cost_checkout_col}:{cost_checkout_col},\"<>\")"
-                )
-        if checkout_empresa_cell:
-            value_cell = find_value_cell(overview_sheet, checkout_empresa_cell)
-            if value_cell:
-                value_cell.value = (
-                    f"=SUMIFS('Custo empresa'!{cost_debito_col}:{cost_debito_col},"
-                    f"'Custo empresa'!{cost_estabelecimento_col}:{cost_estabelecimento_col},"
-                    f"\"{COST_FILTER_VALUE}\","
-                    f"'Custo empresa'!{cost_checkout_col}:{cost_checkout_col},\"<>\")"
-                )
-        if custo_empresa_cell:
-            value_cell = find_value_cell(overview_sheet, custo_empresa_cell)
-            if value_cell:
-                value_cell.value = (
-                    f"=SUMIFS('Custo empresa'!{cost_debito_col}:{cost_debito_col},"
-                    f"'Custo empresa'!{cost_checkout_col}:{cost_checkout_col},\"=\")"
-                )
+    if overview_sheet:
         total_empresa_value = None
         if total_empresa_cell:
             total_empresa_value = find_value_cell(overview_sheet, total_empresa_cell)
@@ -241,24 +186,22 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
                 custo_empresa_value = find_value_cell(
                     overview_sheet, custo_empresa_cell
                 )
-                if (
-                    checkouts_folha_value
-                    and checkouts_empresa_value
-                    and custo_empresa_value
-                ):
-                    total_empresa_value.value = (
-                        f"=SUM({checkouts_folha_value.coordinate},"
-                        f"{checkouts_empresa_value.coordinate},"
-                        f"{custo_empresa_value.coordinate})"
+                company_cells = [
+                    value_cell.coordinate
+                    for value_cell in (
+                        checkouts_folha_value,
+                        checkouts_empresa_value,
+                        custo_empresa_value,
                     )
+                    if value_cell
+                ]
+                if company_cells:
+                    total_empresa_value.value = f"=SUM({','.join(company_cells)})"
         total_func_value = None
         if a_debitar_cell:
             value_cell = find_value_cell(overview_sheet, a_debitar_cell)
             if value_cell:
-                value_cell.value = (
-                    f"=SUM('Desconto folha'!{discount_debito_col}:"
-                    f"{discount_debito_col})"
-                )
+                value_cell.value = "=SUM('Desconto folha'!M:M)"
         if total_func_cell:
             total_func_value = find_value_cell(overview_sheet, total_func_cell)
             if total_func_value and a_debitar_cell:
@@ -271,8 +214,7 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
             )
             if total_fechamento_value:
                 total_fechamento_value.value = (
-                    f"=SUM({total_empresa_value.coordinate},"
-                    f"{total_func_value.coordinate})"
+                    f"={total_empresa_value.coordinate}+{total_func_value.coordinate}"
                 )
 
     output_buffer = BytesIO()
