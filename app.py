@@ -113,42 +113,55 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
 
     detailed = pd.read_excel(excel_file, sheet_name=CENTER_SHEET_NAME)
 
-    # Máscara boleana para saber quem tem checkout preenchido
+    # Máscara: True se tiver checkout (data preenchida), False se vazio
     checkout_filled = (
         detailed[CHECKOUT_COLUMN].notna()
         & detailed[CHECKOUT_COLUMN].astype(str).str.strip().ne("")
     )
 
-    # === AJUSTE FINO SOLICITADO ===
-    # Regra: Aba "Custo empresa" contém APENAS registros "RESGATE LIMITE PARA FLEX".
-    # Nenhum "TARIFA..." entra aqui.
-    
-    # Bloco 1: RESGATE... SEM Checkout (Vazio/Nulo)
-    cost_block_1_no_checkout = detailed[
+    # === BLOCO 1: RESGATE... SEM DATA NO CHECKOUT ===
+    cost_resgate_no_checkout = detailed[
         (detailed[COLUMN_ESTABELECIMENTO] == DISCOUNT_FILTER_VALUE)
         & ~checkout_filled
     ]
 
-    # Bloco 2: RESGATE... COM Checkout (Preenchido)
-    # Estes registros NÃO são removidos, apenas vão para baixo do separador.
-    cost_block_2_with_checkout = detailed[
+    # === BLOCO 2: TARIFA... COM DATA NO CHECKOUT ===
+    # (Solicitação: Checkouts Empresa deve conter TARIFA apenas se tiver data)
+    cost_tarifa_checkout = detailed[
+        (detailed[COLUMN_ESTABELECIMENTO] == COST_FILTER_VALUE)
+        & checkout_filled
+    ]
+
+    # === BLOCO 3: RESGATE... COM DATA NO CHECKOUT ===
+    cost_resgate_checkout = detailed[
         (detailed[COLUMN_ESTABELECIMENTO] == DISCOUNT_FILTER_VALUE)
         & checkout_filled
     ]
 
-    # Separador
+    # Labels divisores
+    title_empresa = pd.DataFrame([{detailed.columns[0]: "Checkouts Empresa"}])
     title_folha = pd.DataFrame([{detailed.columns[0]: "Checkouts Folha colab"}])
+
+    title_empresa = title_empresa.reindex(columns=detailed.columns, fill_value="")
     title_folha = title_folha.reindex(columns=detailed.columns, fill_value="")
 
-    # Montagem final: Bloco 1 -> Separador -> Bloco 2
+    # Montagem final: 
+    # 1. Resgate (vazio) 
+    # 2. Label Empresa -> Tarifa (preenchido)
+    # 3. Label Folha -> Resgate (preenchido)
     cost_frame = pd.concat(
-        [cost_block_1_no_checkout, title_folha, cost_block_2_with_checkout],
+        [
+            cost_resgate_no_checkout, 
+            title_empresa, 
+            cost_tarifa_checkout, 
+            title_folha, 
+            cost_resgate_checkout
+        ],
         ignore_index=True,
     )
 
-    # Montagem da aba de Desconto Folha (mantida a lógica padrão ou similar, ajustando se necessário)
-    # Assumindo que a aba 'Desconto folha' deve conter a mesma lógica de 'sem checkout' do filtro de desconto
-    # ou se ela tem uma lógica separada. Baseado no script anterior:
+    # Lógica para aba de Desconto (Geralmente são os Resgates sem checkout, ou todos os Resgates)
+    # Mantendo lógica padrão de Resgates sem checkout, se precisar ajustar avise.
     discount_frame = detailed[
         (detailed[COLUMN_ESTABELECIMENTO] == DISCOUNT_FILTER_VALUE) & ~checkout_filled
     ]
@@ -210,18 +223,24 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
         raise ValueError("Não foi possível localizar as células de VALOR no Overview.")
 
     # Fórmulas com VÍRGULA (padrão Openpyxl)
+    
+    # 1. Checkout Folha = Soma (Resgate) Onde (Checkout não é vazio)
     v_checkout_folha.value = (
         f"=SUMIFS('Custo empresa'!{cost_debito_col}:{cost_debito_col},"
         f"'Custo empresa'!{cost_est_col}:{cost_est_col},\"{DISCOUNT_FILTER_VALUE}\","
         f"'Custo empresa'!{cost_checkout_col}:{cost_checkout_col},\"<>\")"
     )
 
+    # 2. Checkout Empresa = Soma (Tarifa) Onde (Checkout não é vazio)
+    # Como agora incluímos os registros de Tarifa na aba 'Custo empresa', essa fórmula volta a funcionar corretamente
     v_checkout_empresa.value = (
         f"=SUMIFS('Custo empresa'!{cost_debito_col}:{cost_debito_col},"
         f"'Custo empresa'!{cost_est_col}:{cost_est_col},\"{COST_FILTER_VALUE}\","
         f"'Custo empresa'!{cost_checkout_col}:{cost_checkout_col},\"<>\")"
     )
 
+    # 3. Custo empresa = Soma (Geralmente Resgate sem checkout, ou filtrado por lógica específica)
+    # Aqui ajustei para somar onde o checkout é "Vazio" (=), assumindo que são os Resgates do Bloco 1
     v_custo_empresa.value = (
         f"=SUMIFS('Custo empresa'!{cost_debito_col}:{cost_debito_col},"
         f"'Custo empresa'!{cost_checkout_col}:{cost_checkout_col},\"=\")"
