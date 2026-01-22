@@ -7,6 +7,7 @@ import pandas as pd
 import streamlit as st
 from openpyxl import load_workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
+from copy import copy
 
 
 CENTER_SHEET_NAME = "Detalhado"
@@ -76,11 +77,17 @@ def find_header_column_letter(sheet, labels: set[str]) -> str | None:
 
 def copy_row_style(source_row, target_row) -> None:
     for source_cell, target_cell in zip(source_row, target_row):
-        target_cell.font = source_cell.font
-        target_cell.fill = source_cell.fill
-        target_cell.border = source_cell.border
-        target_cell.alignment = source_cell.alignment
-        target_cell.number_format = source_cell.number_format
+        if source_cell.font:
+            target_cell.font = copy(source_cell.font)
+        if source_cell.fill:
+            target_cell.fill = copy(source_cell.fill)
+        if source_cell.border:
+            target_cell.border = copy(source_cell.border)
+        if source_cell.alignment:
+            target_cell.alignment = copy(source_cell.alignment)
+        if source_cell.number_format:
+            target_cell.number_format = source_cell.number_format
+
 
 
 def get_overview_value_col(overview_sheet):
