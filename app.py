@@ -97,6 +97,18 @@ def copy_row_style(source_row, target_row) -> None:
         target_cell.number_format = source_cell.number_format
 
 
+def compress_blank_rows_visual(sheet, start_row: int, end_row: int, blank_height: float = 2.0):
+    """
+    Ajuste visual seguro:
+    - Não remove linhas (não afeta fórmulas / referências).
+    - Apenas reduz altura de linhas totalmente vazias em um range.
+    """
+    for r in range(start_row, end_row + 1):
+        row = sheet[r]
+        if all(cell.value in (None, "") for cell in row):
+            sheet.row_dimensions[r].height = blank_height
+
+
 # =====================
 # Processamento
 # =====================
@@ -112,9 +124,7 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
     )
 
     cost_no_checkout = detailed[
-        detailed[COLUMN_ESTABELECIMENTO].isin(
-            [COST_FILTER_VALUE, DISCOUNT_FILTER_VALUE]
-        )
+        detailed[COLUMN_ESTABELECIMENTO].isin([COST_FILTER_VALUE, DISCOUNT_FILTER_VALUE])
         & ~checkout_filled
     ]
 
@@ -127,8 +137,7 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
     ]
 
     discount_frame = detailed[
-        (detailed[COLUMN_ESTABELECIMENTO] == DISCOUNT_FILTER_VALUE)
-        & ~checkout_filled
+        (detailed[COLUMN_ESTABELECIMENTO] == DISCOUNT_FILTER_VALUE) & ~checkout_filled
     ]
 
     title_empresa = pd.DataFrame([{detailed.columns[0]: "Checkouts Empresa"}])
@@ -138,13 +147,7 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
     title_folha = title_folha.reindex(columns=detailed.columns, fill_value="")
 
     cost_frame = pd.concat(
-        [
-            cost_no_checkout,
-            title_empresa,
-            cost_checkout_empresa,
-            title_folha,
-            cost_checkout_folha,
-        ],
+        [cost_no_checkout, title_empresa, cost_checkout_empresa, title_folha, cost_checkout_folha],
         ignore_index=True,
     )
 
@@ -163,14 +166,9 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
     taxa_admin_cell.value = OVERVIEW_CHECKOUT_EMPRESA_LABEL
     subsidios_cell.value = OVERVIEW_CUSTO_EMPRESA_LABEL
 
-    copy_row_style(
-        overview_sheet[checkout_pagar_cell.row],
-        overview_sheet[taxa_admin_cell.row],
-    )
-    copy_row_style(
-        overview_sheet[checkout_pagar_cell.row],
-        overview_sheet[subsidios_cell.row],
-    )
+    # Mantém o estilo igual (Arial etc.)
+    copy_row_style(overview_sheet[checkout_pagar_cell.row], overview_sheet[taxa_admin_cell.row])
+    copy_row_style(overview_sheet[checkout_pagar_cell.row], overview_sheet[subsidios_cell.row])
 
     checkout_folha_cell = checkout_pagar_cell
     checkout_empresa_cell = taxa_admin_cell
@@ -179,18 +177,7 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
     total_empresa_cell = find_label_cell(overview_sheet, OVERVIEW_TOTAL_LABEL)
     a_debitar_cell = find_label_cell(overview_sheet, OVERVIEW_A_DEBITAR_LABEL)
     total_func_cell = find_label_cell(overview_sheet, OVERVIEW_TOTAL_FUNC_LABEL)
-    total_fechamento_cell = find_label_cell(
-        overview_sheet, OVERVIEW_TOTAL_FECHAMENTO_LABEL
-    )
-
-    # === Remove linhas vazias (acabamento visual) ===
-    rows_to_delete = [
-        row[0].row
-        for row in overview_sheet.iter_rows()
-        if all(cell.value in (None, "") for cell in row)
-    ]
-    for row_idx in sorted(rows_to_delete, reverse=True):
-        overview_sheet.delete_rows(row_idx)
+    total_fechamento_cell = find_label_cell(overview_sheet, OVERVIEW_TOTAL_FECHAMENTO_LABEL)
 
     # === Recria abas ===
     for name in (COST_SHEET_NAME, DISCOUNT_SHEET_NAME):
@@ -206,59 +193,74 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
         discount_sheet.append(row)
 
     # === Fórmulas ===
-    cost_debito_col = find_header_column(
-        cost_sheet, {COST_HEADER_DEBITO, COST_HEADER_DEBITO_ACCENT}
-    )
+    cost_debito_col = find_header_column(cost_sheet, {COST_HEADER_DEBITO, COST_HEADER_DEBITO_ACCENT})
     cost_est_col = find_header_column(cost_sheet, {COST_HEADER_ESTABELECIMENTO})
     cost_checkout_col = find_header_column(cost_sheet, {COST_HEADER_CHECKOUT})
 
-    find_value_cell(overview_sheet, checkout_folha_cell).value = (
+    if not (cost_debito_col and cost_est_col and cost_checkout_col):
+        raise ValueError("Não foi possível identificar colunas obrigatórias na aba 'Custo empresa'.")
+
+    # Valores
+    v_checkout_folha = find_value_cell(overview_sheet, checkout_folha_cell)
+    v_checkout_empresa = find_value_cell(overview_sheet, checkout_empresa_cell)
+    v_custo_empresa = find_value_cell(overview_sheet, custo_empresa_cell)
+
+    if not (v_checkout_folha and v_checkout_empresa and v_custo_empresa):
+        raise ValueError("Não foi possível localizar as células de VALOR no Overview.")
+
+    v_checkout_folha.value = (
         f"=SUMIFS('Custo empresa'!{cost_debito_col}:{cost_debito_col},"
         f"'Custo empresa'!{cost_est_col}:{cost_est_col},\"{DISCOUNT_FILTER_VALUE}\","
         f"'Custo empresa'!{cost_checkout_col}:{cost_checkout_col},\"<>\")"
     )
 
-    find_value_cell(overview_sheet, checkout_empresa_cell).value = (
+    v_checkout_empresa.value = (
         f"=SUMIFS('Custo empresa'!{cost_debito_col}:{cost_debito_col},"
         f"'Custo empresa'!{cost_est_col}:{cost_est_col},\"{COST_FILTER_VALUE}\","
         f"'Custo empresa'!{cost_checkout_col}:{cost_checkout_col},\"<>\")"
     )
 
-    find_value_cell(overview_sheet, custo_empresa_cell).value = (
+    v_custo_empresa.value = (
         f"=SUMIFS('Custo empresa'!{cost_debito_col}:{cost_debito_col},"
         f"'Custo empresa'!{cost_checkout_col}:{cost_checkout_col},\"=\")"
     )
 
+    # Total empresa
     total_empresa_value = find_value_cell(overview_sheet, total_empresa_cell)
-    total_empresa_value.value = (
-        f"=SUM({find_value_cell(overview_sheet, checkout_folha_cell).coordinate};"
-        f"{find_value_cell(overview_sheet, checkout_empresa_cell).coordinate};"
-        f"{find_value_cell(overview_sheet, custo_empresa_cell).coordinate})"
-    )
+    if not total_empresa_value:
+        raise ValueError("Não foi possível localizar a célula de valor de 'TOTAL DA EMPRESA'.")
 
+    total_empresa_value.value = f"=SUM({v_checkout_folha.coordinate};{v_checkout_empresa.coordinate};{v_custo_empresa.coordinate})"
+
+    # A debitar em folha
     a_debitar_value = find_value_cell(overview_sheet, a_debitar_cell)
+    if not a_debitar_value:
+        raise ValueError("Não foi possível localizar a célula de valor de 'A debitar em folha'.")
+
     a_debitar_value.value = "=SUM('Desconto folha'!M:M)"
 
+    # Total funcionário
     total_func_value = find_value_cell(overview_sheet, total_func_cell)
+    if not total_func_value:
+        raise ValueError("Não foi possível localizar a célula de valor de 'TOTAL DO FUNCIONÁRIO'.")
+
     total_func_value.value = f"={a_debitar_value.coordinate}"
 
-    overview_sheet.cell(
+    # Total fechamento = empresa + funcionário
+    if not total_fechamento_cell:
+        raise ValueError("Não foi possível localizar o label de 'TOTAL DO FECHAMENTO'.")
+
+    total_fechamento_value = overview_sheet.cell(
         row=total_fechamento_cell.row + 1,
         column=total_fechamento_cell.column,
-    ).value = f"={total_empresa_value.coordinate}+{total_func_value.coordinate}"
-
-    output = BytesIO()
-    workbook.save(output)
-    output.seek(0)
-    return output
+    )
+    total_fechamento_value.value = f"={total_empresa_value.coordinate}+{total_func_value.coordinate}"
 
 
 def main() -> None:
     st.title("Gerador de Relatório Excel")
 
-    uploaded_file = st.file_uploader(
-        "Selecione o arquivo Excel (.xlsx)", type=["xlsx"]
-    )
+    uploaded_file = st.file_uploader("Selecione o arquivo Excel (.xlsx)", type=["xlsx"])
 
     if uploaded_file and st.button("Processar arquivo"):
         output = process_excel(uploaded_file)
