@@ -266,7 +266,7 @@ def main() -> None:
         output = process_excel(uploaded_file)
         st.download_button(
             "Baixar arquivo processado",
-            output,
+            data=output.getvalue(),
             file_name=f"processado_{uploaded_file.name}",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
