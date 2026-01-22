@@ -17,16 +17,15 @@ DISCOUNT_SHEET_NAME = "Desconto folha"
 COST_FILTER_VALUE = "TARIFA RESGATE LIMITE PARA FLEX"
 DISCOUNT_FILTER_VALUE = "RESGATE LIMITE PARA FLEX"
 OVERVIEW_SHEET_NAME = "Overview"
-OVERVIEW_FILTER_VALUES = {"Créditos inseridos"}
+OVERVIEW_FILTER_VALUES = {"Taxa administrativa", "Subsídios", "Créditos inseridos"}
+OVERVIEW_SECTION_LABEL = "PARTE DA EMPRESA"
 OVERVIEW_TOTAL_LABEL = "TOTAL DA EMPRESA"
 OVERVIEW_CHECKOUT_FOLHA_LABEL = "Checkouts Folha colab."
 OVERVIEW_CHECKOUT_EMPRESA_LABEL = "Checkouts a pagar Empresa"
-OVERVIEW_CHECKOUT_PAGAR_LABEL = "Checkouts a pagar"
-OVERVIEW_TAXA_ADMIN_LABEL = "Taxa administrativa"
-OVERVIEW_SUBSIDIOS_LABEL = "Subsídios"
 OVERVIEW_CUSTO_EMPRESA_LABEL = "Custo empresa (Taxa tarifas)"
 OVERVIEW_A_DEBITAR_LABEL = "A debitar em folha"
 OVERVIEW_TOTAL_FUNC_LABEL = "TOTAL DO FUNCIONÁRIO"
+OVERVIEW_TOTAL_FECHAMENTO_LABEL = "TOTAL DO FECHAMENTO"
 COST_HEADER_ESTABELECIMENTO = "ESTABELECIMENTO"
 COST_HEADER_CHECKOUT = "CHECKOUT"
 COST_HEADER_DEBITO = "DEBITO EM FOLHA"
@@ -151,6 +150,7 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
     total_empresa_cell = None
     a_debitar_cell = None
     total_func_cell = None
+    total_fechamento_cell = None
     if overview_sheet:
         normalized_filters = {normalize_text(value) for value in OVERVIEW_FILTER_VALUES}
         rows_to_remove = {
@@ -162,25 +162,6 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
         for row_idx in sorted(rows_to_remove, reverse=True):
             overview_sheet.delete_rows(row_idx)
 
-        checkout_pagar_cell = find_label_cell(
-            overview_sheet, OVERVIEW_CHECKOUT_PAGAR_LABEL
-        )
-        taxa_admin_cell = find_label_cell(overview_sheet, OVERVIEW_TAXA_ADMIN_LABEL)
-        subsidios_cell = find_label_cell(overview_sheet, OVERVIEW_SUBSIDIOS_LABEL)
-
-        if checkout_pagar_cell:
-            checkout_pagar_cell.value = OVERVIEW_CHECKOUT_FOLHA_LABEL
-        if taxa_admin_cell:
-            taxa_admin_cell.value = OVERVIEW_CHECKOUT_EMPRESA_LABEL
-        if subsidios_cell:
-            subsidios_cell.value = OVERVIEW_CUSTO_EMPRESA_LABEL
-
-        if checkout_pagar_cell:
-            template_row = overview_sheet[checkout_pagar_cell.row]
-            for label_cell in (taxa_admin_cell, subsidios_cell):
-                if label_cell:
-                    copy_row_style(template_row, overview_sheet[label_cell.row])
-
         checkout_folha_cell = find_label_cell(
             overview_sheet, OVERVIEW_CHECKOUT_FOLHA_LABEL
         )
@@ -191,6 +172,15 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
         total_empresa_cell = find_label_cell(overview_sheet, OVERVIEW_TOTAL_LABEL)
         a_debitar_cell = find_label_cell(overview_sheet, OVERVIEW_A_DEBITAR_LABEL)
         total_func_cell = find_label_cell(overview_sheet, OVERVIEW_TOTAL_FUNC_LABEL)
+        total_fechamento_cell = find_label_cell(
+            overview_sheet, OVERVIEW_TOTAL_FECHAMENTO_LABEL
+        )
+
+        if checkout_empresa_cell:
+            template_row = overview_sheet[checkout_empresa_cell.row]
+            for label_cell in (checkout_folha_cell, custo_empresa_cell):
+                if label_cell:
+                    copy_row_style(template_row, overview_sheet[label_cell.row])
 
     for sheet_name in (COST_SHEET_NAME, DISCOUNT_SHEET_NAME):
         if sheet_name in workbook.sheetnames:
@@ -276,6 +266,14 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
                 a_debitar_value = find_value_cell(overview_sheet, a_debitar_cell)
                 if a_debitar_value:
                     total_func_value.value = f"={a_debitar_value.coordinate}"
+        if total_fechamento_cell and total_empresa_value and total_func_value:
+            total_fechamento_value = overview_sheet.cell(
+                row=total_fechamento_cell.row + 1,
+                column=total_fechamento_cell.column,
+            )
+            total_fechamento_value.value = (
+                f"={total_empresa_value.coordinate}+{total_func_value.coordinate}"
+            )
 
     output_buffer = BytesIO()
     workbook.save(output_buffer)
