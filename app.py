@@ -208,6 +208,7 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
     if not (v_checkout_folha and v_checkout_empresa and v_custo_empresa):
         raise ValueError("Não foi possível localizar as células de VALOR no Overview.")
 
+    # NOTA: Openpyxl usa ',' como separador de argumentos, não ';'
     v_checkout_folha.value = (
         f"=SUMIFS('Custo empresa'!{cost_debito_col}:{cost_debito_col},"
         f"'Custo empresa'!{cost_est_col}:{cost_est_col},\"{DISCOUNT_FILTER_VALUE}\","
@@ -225,12 +226,12 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
         f"'Custo empresa'!{cost_checkout_col}:{cost_checkout_col},\"=\")"
     )
 
-    # Total empresa
+    # Total empresa (Corrigido para usar vírgula)
     total_empresa_value = find_value_cell(overview_sheet, total_empresa_cell)
     if not total_empresa_value:
         raise ValueError("Não foi possível localizar a célula de valor de 'TOTAL DA EMPRESA'.")
 
-    total_empresa_value.value = f"=SUM({v_checkout_folha.coordinate};{v_checkout_empresa.coordinate};{v_custo_empresa.coordinate})"
+    total_empresa_value.value = f"=SUM({v_checkout_folha.coordinate},{v_checkout_empresa.coordinate},{v_custo_empresa.coordinate})"
 
     # A debitar em folha
     a_debitar_value = find_value_cell(overview_sheet, a_debitar_cell)
@@ -255,6 +256,13 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
         column=total_fechamento_cell.column,
     )
     total_fechamento_value.value = f"={total_empresa_value.coordinate}+{total_func_value.coordinate}"
+
+    # === CORREÇÃO: Salvar e Retornar ===
+    output_buffer = BytesIO()
+    workbook.save(output_buffer)
+    output_buffer.seek(0)
+    
+    return output_buffer
 
 
 def main() -> None:
