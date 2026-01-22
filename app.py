@@ -98,11 +98,6 @@ def copy_row_style(source_row, target_row) -> None:
 
 
 def compress_blank_rows_visual(sheet, start_row: int, end_row: int, blank_height: float = 2.0):
-    """
-    Ajuste visual seguro:
-    - Não remove linhas (não afeta fórmulas / referências).
-    - Apenas reduz altura de linhas totalmente vazias em um range.
-    """
     for r in range(start_row, end_row + 1):
         row = sheet[r]
         if all(cell.value in (None, "") for cell in row):
@@ -123,14 +118,18 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
         & detailed[CHECKOUT_COLUMN].astype(str).str.strip().ne("")
     )
 
+    # === ALTERAÇÃO 1: Filtrar estritamente o DISCOUNT_FILTER_VALUE (RESGATE) ===
+    # Antes checava .isin([COST..., DISCOUNT...]), agora apenas DISCOUNT.
     cost_no_checkout = detailed[
-        detailed[COLUMN_ESTABELECIMENTO].isin([COST_FILTER_VALUE, DISCOUNT_FILTER_VALUE])
+        (detailed[COLUMN_ESTABELECIMENTO] == DISCOUNT_FILTER_VALUE)
         & ~checkout_filled
     ]
 
-    cost_checkout_empresa = detailed[
-        (detailed[COLUMN_ESTABELECIMENTO] == COST_FILTER_VALUE) & checkout_filled
-    ]
+    # === ALTERAÇÃO 2: Removemos a lógica de Checkouts de Empresa (Tarifa) ===
+    # O usuário quer apenas RESGATE LIMITE PARA FLEX na aba.
+    
+    # Esta parte (cost_checkout_empresa) foi removida da montagem final
+    # cost_checkout_empresa = detailed[ ... ] 
 
     cost_checkout_folha = detailed[
         (detailed[COLUMN_ESTABELECIMENTO] == DISCOUNT_FILTER_VALUE) & checkout_filled
@@ -140,14 +139,13 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
         (detailed[COLUMN_ESTABELECIMENTO] == DISCOUNT_FILTER_VALUE) & ~checkout_filled
     ]
 
-    title_empresa = pd.DataFrame([{detailed.columns[0]: "Checkouts Empresa"}])
+    # Só precisamos do título de folha agora
     title_folha = pd.DataFrame([{detailed.columns[0]: "Checkouts Folha colab"}])
-
-    title_empresa = title_empresa.reindex(columns=detailed.columns, fill_value="")
     title_folha = title_folha.reindex(columns=detailed.columns, fill_value="")
 
+    # === ALTERAÇÃO 3: Montar o frame sem o bloco de Empresa (Tarifa) ===
     cost_frame = pd.concat(
-        [cost_no_checkout, title_empresa, cost_checkout_empresa, title_folha, cost_checkout_folha],
+        [cost_no_checkout, title_folha, cost_checkout_folha],
         ignore_index=True,
     )
 
@@ -166,7 +164,7 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
     taxa_admin_cell.value = OVERVIEW_CHECKOUT_EMPRESA_LABEL
     subsidios_cell.value = OVERVIEW_CUSTO_EMPRESA_LABEL
 
-    # Mantém o estilo igual (Arial etc.)
+    # Mantém o estilo
     copy_row_style(overview_sheet[checkout_pagar_cell.row], overview_sheet[taxa_admin_cell.row])
     copy_row_style(overview_sheet[checkout_pagar_cell.row], overview_sheet[subsidios_cell.row])
 
@@ -200,7 +198,6 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
     if not (cost_debito_col and cost_est_col and cost_checkout_col):
         raise ValueError("Não foi possível identificar colunas obrigatórias na aba 'Custo empresa'.")
 
-    # Valores
     v_checkout_folha = find_value_cell(overview_sheet, checkout_folha_cell)
     v_checkout_empresa = find_value_cell(overview_sheet, checkout_empresa_cell)
     v_custo_empresa = find_value_cell(overview_sheet, custo_empresa_cell)
@@ -208,7 +205,7 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
     if not (v_checkout_folha and v_checkout_empresa and v_custo_empresa):
         raise ValueError("Não foi possível localizar as células de VALOR no Overview.")
 
-    # NOTA: Openpyxl usa ',' como separador de argumentos, não ';'
+    # Fórmulas com VÍRGULA (padrão Openpyxl)
     v_checkout_folha.value = (
         f"=SUMIFS('Custo empresa'!{cost_debito_col}:{cost_debito_col},"
         f"'Custo empresa'!{cost_est_col}:{cost_est_col},\"{DISCOUNT_FILTER_VALUE}\","
@@ -226,7 +223,7 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
         f"'Custo empresa'!{cost_checkout_col}:{cost_checkout_col},\"=\")"
     )
 
-    # Total empresa (Corrigido para usar vírgula)
+    # Total empresa
     total_empresa_value = find_value_cell(overview_sheet, total_empresa_cell)
     if not total_empresa_value:
         raise ValueError("Não foi possível localizar a célula de valor de 'TOTAL DA EMPRESA'.")
@@ -247,7 +244,7 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
 
     total_func_value.value = f"={a_debitar_value.coordinate}"
 
-    # Total fechamento = empresa + funcionário
+    # Total fechamento
     if not total_fechamento_cell:
         raise ValueError("Não foi possível localizar o label de 'TOTAL DO FECHAMENTO'.")
 
@@ -257,7 +254,7 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
     )
     total_fechamento_value.value = f"={total_empresa_value.coordinate}+{total_func_value.coordinate}"
 
-    # === CORREÇÃO: Salvar e Retornar ===
+    # Salvar e Retornar
     output_buffer = BytesIO()
     workbook.save(output_buffer)
     output_buffer.seek(0)
