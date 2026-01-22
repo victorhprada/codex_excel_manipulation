@@ -260,25 +260,28 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
 def main() -> None:
     st.title("Gerador de Relatório Excel")
 
-    uploaded_file = st.file_uploader("Selecione o arquivo Excel (.xlsx)", type=["xlsx"])
+    uploaded_file = st.file_uploader(
+        "Selecione o arquivo Excel (.xlsx)", type=["xlsx"]
+    )
 
     if uploaded_file and st.button("Processar arquivo"):
-    try:
-        output = process_excel(uploaded_file)
-    except Exception as e:
-        st.error(f"Erro ao processar o arquivo: {e}")
-        return
+        try:
+            output = process_excel(uploaded_file)
+        except Exception as e:
+            st.error(f"Erro ao processar o arquivo: {e}")
+            return
 
-    if output is None:
-        st.error("Erro interno: o processamento não retornou nenhum arquivo.")
-        return
+        if output is None:
+            st.error("Erro interno: o processamento não retornou nenhum arquivo.")
+            return
 
-    st.download_button(
-        "Baixar arquivo processado",
-        data=output.getvalue(),
-        file_name=f"processado_{uploaded_file.name}",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
+        st.download_button(
+            "Baixar arquivo processado",
+            data=output.getvalue(),
+            file_name=f"processado_{uploaded_file.name}",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
 
 if __name__ == "__main__":
     main()
