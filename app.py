@@ -113,41 +113,45 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
 
     detailed = pd.read_excel(excel_file, sheet_name=CENTER_SHEET_NAME)
 
+    # Máscara boleana para saber quem tem checkout preenchido
     checkout_filled = (
         detailed[CHECKOUT_COLUMN].notna()
         & detailed[CHECKOUT_COLUMN].astype(str).str.strip().ne("")
     )
 
-    # === ALTERAÇÃO 1: Filtrar estritamente o DISCOUNT_FILTER_VALUE (RESGATE) ===
-    # Antes checava .isin([COST..., DISCOUNT...]), agora apenas DISCOUNT.
-    cost_no_checkout = detailed[
+    # === AJUSTE FINO SOLICITADO ===
+    # Regra: Aba "Custo empresa" contém APENAS registros "RESGATE LIMITE PARA FLEX".
+    # Nenhum "TARIFA..." entra aqui.
+    
+    # Bloco 1: RESGATE... SEM Checkout (Vazio/Nulo)
+    cost_block_1_no_checkout = detailed[
         (detailed[COLUMN_ESTABELECIMENTO] == DISCOUNT_FILTER_VALUE)
         & ~checkout_filled
     ]
 
-    # === ALTERAÇÃO 2: Removemos a lógica de Checkouts de Empresa (Tarifa) ===
-    # O usuário quer apenas RESGATE LIMITE PARA FLEX na aba.
-    
-    # Esta parte (cost_checkout_empresa) foi removida da montagem final
-    # cost_checkout_empresa = detailed[ ... ] 
-
-    cost_checkout_folha = detailed[
-        (detailed[COLUMN_ESTABELECIMENTO] == DISCOUNT_FILTER_VALUE) & checkout_filled
+    # Bloco 2: RESGATE... COM Checkout (Preenchido)
+    # Estes registros NÃO são removidos, apenas vão para baixo do separador.
+    cost_block_2_with_checkout = detailed[
+        (detailed[COLUMN_ESTABELECIMENTO] == DISCOUNT_FILTER_VALUE)
+        & checkout_filled
     ]
 
-    discount_frame = detailed[
-        (detailed[COLUMN_ESTABELECIMENTO] == DISCOUNT_FILTER_VALUE) & ~checkout_filled
-    ]
-
-    # Só precisamos do título de folha agora
+    # Separador
     title_folha = pd.DataFrame([{detailed.columns[0]: "Checkouts Folha colab"}])
     title_folha = title_folha.reindex(columns=detailed.columns, fill_value="")
 
-    # === ALTERAÇÃO 3: Montar o frame sem o bloco de Empresa (Tarifa) ===
+    # Montagem final: Bloco 1 -> Separador -> Bloco 2
     cost_frame = pd.concat(
-        [cost_no_checkout, title_folha, cost_checkout_folha],
+        [cost_block_1_no_checkout, title_folha, cost_block_2_with_checkout],
         ignore_index=True,
     )
+
+    # Montagem da aba de Desconto Folha (mantida a lógica padrão ou similar, ajustando se necessário)
+    # Assumindo que a aba 'Desconto folha' deve conter a mesma lógica de 'sem checkout' do filtro de desconto
+    # ou se ela tem uma lógica separada. Baseado no script anterior:
+    discount_frame = detailed[
+        (detailed[COLUMN_ESTABELECIMENTO] == DISCOUNT_FILTER_VALUE) & ~checkout_filled
+    ]
 
     workbook = load_workbook(BytesIO(bytes_data))
     overview_sheet = workbook[OVERVIEW_SHEET_NAME]
