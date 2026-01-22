@@ -162,4 +162,158 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
     workbook = load_workbook(BytesIO(bytes_data))
     overview_sheet = workbook[OVERVIEW_SHEET_NAME] if OVERVIEW_SHEET_NAME in workbook.sheetnames else None
 
-    # Remove e recria as abas tabula
+    # Remove e recria as abas tabulares
+    for sheet_name in (COST_SHEET_NAME, DISCOUNT_SHEET_NAME):
+        if sheet_name in workbook.sheetnames:
+            del workbook[sheet_name]
+
+    cost_sheet = workbook.create_sheet(COST_SHEET_NAME)
+    for row in dataframe_to_rows(cost_frame, index=False, header=True):
+        cost_sheet.append(row)
+
+    discount_sheet = workbook.create_sheet(DISCOUNT_SHEET_NAME)
+    for row in dataframe_to_rows(discount_frame, index=False, header=True):
+        discount_sheet.append(row)
+
+    # ===== Ajustes do OVERVIEW (sem deletar linhas!) =====
+    if overview_sheet:
+        value_col = get_overview_value_col(overview_sheet)
+
+        # Encontra as linhas existentes que vamos reutilizar
+        label_checkout_pagar = find_label_cell(overview_sheet, OVERVIEW_CHECKOUT_PAGAR_LABEL)
+        label_taxa_admin = find_label_cell(overview_sheet, OVERVIEW_TAXA_ADMIN_LABEL)
+        label_subsidios = find_label_cell(overview_sheet, OVERVIEW_SUBSIDIOS_LABEL)
+        label_creditos = find_label_cell(overview_sheet, OVERVIEW_CREDITOS_LABEL)
+
+        # Template de estilo: usa a linha "Checkouts a pagar" (que já existe e está correta)
+        template_row = overview_sheet[label_checkout_pagar.row] if label_checkout_pagar else None
+
+        # Renomeia reaproveitando linhas (sem inserir/remover)
+        if label_checkout_pagar:
+            label_checkout_pagar.value = OVERVIEW_CHECKOUT_FOLHA_LABEL
+        if label_taxa_admin:
+            label_taxa_admin.value = OVERVIEW_CHECKOUT_EMPRESA_LABEL
+        if label_subsidios:
+            label_subsidios.value = OVERVIEW_CUSTO_EMPRESA_LABEL
+
+        # “Remove” Créditos inseridos sem deletar linha: limpa label e valor
+        if label_creditos and value_col:
+            label_creditos.value = ""
+            get_overview_value_cell(overview_sheet, label_creditos, value_col).value = None
+
+        # Copia estilo do template para as linhas reaproveitadas (garante Arial)
+        if template_row:
+            for label_cell in (label_taxa_admin, label_subsidios):
+                if label_cell:
+                    copy_row_style(template_row, overview_sheet[label_cell.row])
+
+        # Colunas na aba Custo empresa (detectadas pelo header)
+        cost_debito_col = find_header_column_letter(cost_sheet, {COST_HEADER_DEBITO, COST_HEADER_DEBITO_ACCENT})
+        cost_estab_col = find_header_column_letter(cost_sheet, {COST_HEADER_ESTABELECIMENTO})
+        cost_checkout_col = find_header_column_letter(cost_sheet, {COST_HEADER_CHECKOUT})
+
+        # Células de valor no Overview (mesmo vazias!)
+        v_checkout_folha = get_overview_value_cell(overview_sheet, label_checkout_pagar, value_col) if value_col else None
+        v_checkout_empresa = get_overview_value_cell(overview_sheet, label_taxa_admin, value_col) if value_col else None
+        v_custo_empresa = get_overview_value_cell(overview_sheet, label_subsidios, value_col) if value_col else None
+
+        # Fórmulas dinâmicas (sempre em colunas inteiras, sem ranges fixos)
+        if cost_debito_col and cost_estab_col and cost_checkout_col:
+            if v_checkout_folha:
+                v_checkout_folha.value = (
+                    f"=SUMIFS('Custo empresa'!{cost_debito_col}:{cost_debito_col},"
+                    f"'Custo empresa'!{cost_estab_col}:{cost_estab_col},"
+                    f"\"{DISCOUNT_FILTER_VALUE}\","
+                    f"'Custo empresa'!{cost_checkout_col}:{cost_checkout_col},\"<>\")"
+                )
+            if v_checkout_empresa:
+                v_checkout_empresa.value = (
+                    f"=SUMIFS('Custo empresa'!{cost_debito_col}:{cost_debito_col},"
+                    f"'Custo empresa'!{cost_estab_col}:{cost_estab_col},"
+                    f"\"{COST_FILTER_VALUE}\","
+                    f"'Custo empresa'!{cost_checkout_col}:{cost_checkout_col},\"<>\")"
+                )
+            if v_custo_empresa:
+                # Somar somente quando CHECKOUT estiver vazio:
+                v_custo_empresa.value = (
+                    f"=SUMIFS('Custo empresa'!{cost_debito_col}:{cost_debito_col},"
+                    f"'Custo empresa'!{cost_checkout_col}:{cost_checkout_col},\"=\")"
+                )
+
+        # Total da empresa: soma as 3 células do Overview (coord reais)
+        total_empresa_label = find_label_cell(overview_sheet, OVERVIEW_TOTAL_LABEL)
+        if total_empresa_label and value_col:
+            total_empresa_value = get_overview_value_cell(overview_sheet, total_empresa_label, value_col)
+            parts = [c.coordinate for c in (v_checkout_folha, v_checkout_empresa, v_custo_empresa) if c]
+            if total_empresa_value and parts:
+                total_empresa_value.value = f"=SUM({','.join(parts)})"
+
+        # A debitar em folha e total do funcionário
+        a_debitar_label = find_label_cell(overview_sheet, OVERVIEW_A_DEBITAR_LABEL)
+        total_func_label = find_label_cell(overview_sheet, OVERVIEW_TOTAL_FUNC_LABEL)
+        a_debitar_value = get_overview_value_cell(overview_sheet, a_debitar_label, value_col) if (a_debitar_label and value_col) else None
+        total_func_value = get_overview_value_cell(overview_sheet, total_func_label, value_col) if (total_func_label and value_col) else None
+
+        if a_debitar_value:
+            a_debitar_value.value = "=SUM('Desconto folha'!M:M)"
+        if total_func_value and a_debitar_value:
+            total_func_value.value = f"={a_debitar_value.coordinate}"
+
+        # Total do fechamento: célula abaixo do label (B8:C8 mesclada normalmente)
+        total_fechamento_label = find_label_cell(overview_sheet, OVERVIEW_TOTAL_FECHAMENTO_LABEL)
+        if total_fechamento_label:
+            # valor fica na linha abaixo, mesma coluna do label
+            total_fechamento_value = overview_sheet.cell(
+                row=total_fechamento_label.row + 1,
+                column=total_fechamento_label.column,
+            )
+            # pega total empresa e total funcionário
+            total_empresa_label = find_label_cell(overview_sheet, OVERVIEW_TOTAL_LABEL)
+            total_empresa_value = get_overview_value_cell(overview_sheet, total_empresa_label, value_col) if (total_empresa_label and value_col) else None
+            if total_fechamento_value and total_empresa_value and total_func_value:
+                total_fechamento_value.value = f"={total_empresa_value.coordinate}+{total_func_value.coordinate}"
+
+    output_buffer = BytesIO()
+    workbook.save(output_buffer)
+    output_buffer.seek(0)
+    return output_buffer
+
+
+def main() -> None:
+    st.title("Gerador de Relatorio Excel")
+    st.write(
+        "Envie um arquivo Excel (.xlsx) com as abas originais e gere um novo arquivo "
+        "com as abas adicionais 'Custo empresa' e 'Desconto folha'."
+    )
+
+    uploaded_file = st.file_uploader(
+        "Selecione o arquivo Excel (.xlsx)",
+        type=["xlsx"],
+    )
+
+    if uploaded_file is None:
+        st.info("Nenhum arquivo carregado. Envie um arquivo Excel para continuar.")
+        return
+
+    if st.button("Processar arquivo"):
+        try:
+            output_buffer = process_excel(uploaded_file)
+        except ValueError as exc:
+            st.error(str(exc))
+            return
+        except Exception as exc:  # noqa: BLE001
+            st.error(f"Erro inesperado ao processar o arquivo: {exc}")
+            return
+
+        output_filename = f"processado_{uploaded_file.name}"
+        st.success("Arquivo processado com sucesso.")
+        st.download_button(
+            label="Baixar arquivo processado",
+            data=output_buffer,
+            file_name=output_filename,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+
+if __name__ == "__main__":
+    main()
