@@ -29,7 +29,7 @@ OVERVIEW_SHEET_NAME = "Overview"
 OVERVIEW_CHECKOUT_PAGAR_LABEL = "Checkouts a pagar"
 OVERVIEW_TAXA_ADMIN_LABEL = "Taxa administrativa"
 OVERVIEW_SUBSIDIOS_LABEL = "Subsídios"
-OVERVIEW_CREDITOS_INSERIDOS_LABEL = "Créditos inseridos"  # Novo label para remoção
+OVERVIEW_CREDITOS_INSERIDOS_LABEL = "Créditos inseridos"  # Label para remoção
 
 # Labels finais desejados
 OVERVIEW_CHECKOUT_FOLHA_LABEL = "Checkouts Folha colab."
@@ -165,7 +165,7 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
     workbook = load_workbook(BytesIO(bytes_data))
     overview_sheet = workbook[OVERVIEW_SHEET_NAME]
 
-    # === ALTERAÇÃO: Remover "Créditos inseridos" ANTES de buscar as outras células ===
+    # === REMOVER LINHA "Créditos inseridos" ===
     creditos_cell = find_label_cell(overview_sheet, OVERVIEW_CREDITOS_INSERIDOS_LABEL)
     if creditos_cell:
         overview_sheet.delete_rows(creditos_cell.row)
@@ -300,6 +300,9 @@ def main() -> None:
             st.error("Erro interno: o processamento não retornou nenhum arquivo.")
             return
 
+        # === MENSAGEM DE SUCESSO ===
+        st.success("Processamento concluído com sucesso! Faça o download abaixo.")
+        
         st.download_button(
             "Baixar arquivo processado",
             data=output.getvalue(),
