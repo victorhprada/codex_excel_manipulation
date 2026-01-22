@@ -26,6 +26,10 @@ OVERVIEW_CUSTO_EMPRESA_LABEL = "Custo empresa (Taxa tarifas)"
 OVERVIEW_A_DEBITAR_LABEL = "A debitar em folha"
 OVERVIEW_TOTAL_FUNC_LABEL = "TOTAL DO FUNCIONÁRIO"
 OVERVIEW_TOTAL_FECHAMENTO_LABEL = "TOTAL DO FECHAMENTO"
+COST_HEADER_ESTABELECIMENTO = "ESTABELECIMENTO"
+COST_HEADER_CHECKOUT = "CHECKOUT"
+COST_HEADER_DEBITO = "DEBITO EM FOLHA"
+COST_HEADER_DEBITO_ACCENT = "DÉBITO EM FOLHA"
 
 
 def normalize_text(value: object) -> str:
@@ -51,6 +55,20 @@ def find_value_cell(sheet, label_cell):
         if cell.column > label_cell.column and cell.value not in (None, ""):
             return cell
     return None
+
+
+def find_header_column(sheet, labels: set[str]) -> str | None:
+    normalized = {normalize_text(label) for label in labels}
+    for cell in sheet[1]:
+        if normalize_text(cell.value) in normalized:
+            return cell.column_letter
+    return None
+
+
+def copy_row_style(source_row, target_row) -> None:
+    for source_cell, target_cell in zip(source_row, target_row):
+        target_cell._style = source_cell._style
+        target_cell.number_format = source_cell.number_format
 
 
 def process_excel(uploaded_file: BytesIO) -> BytesIO:
@@ -155,6 +173,36 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
             overview_sheet, OVERVIEW_TOTAL_FECHAMENTO_LABEL
         )
 
+        if total_empresa_cell:
+            label_column = total_empresa_cell.column
+            template_row = overview_sheet[total_empresa_cell.row]
+            missing_labels = [
+                OVERVIEW_CHECKOUT_FOLHA_LABEL,
+                OVERVIEW_CHECKOUT_EMPRESA_LABEL,
+                OVERVIEW_CUSTO_EMPRESA_LABEL,
+            ]
+            existing_labels = {
+                normalize_text(cell.value)
+                for cell in (checkout_folha_cell, checkout_empresa_cell, custo_empresa_cell)
+                if cell
+            }
+            insert_row = total_empresa_cell.row
+            for label in reversed(missing_labels):
+                if normalize_text(label) not in existing_labels:
+                    overview_sheet.insert_rows(insert_row)
+                    copy_row_style(template_row, overview_sheet[insert_row])
+                    overview_sheet.cell(row=insert_row, column=label_column).value = label
+            checkout_folha_cell = find_label_cell(
+                overview_sheet, OVERVIEW_CHECKOUT_FOLHA_LABEL
+            )
+            checkout_empresa_cell = find_label_cell(
+                overview_sheet, OVERVIEW_CHECKOUT_EMPRESA_LABEL
+            )
+            custo_empresa_cell = find_label_cell(
+                overview_sheet, OVERVIEW_CUSTO_EMPRESA_LABEL
+            )
+            total_empresa_cell = find_label_cell(overview_sheet, OVERVIEW_TOTAL_LABEL)
+
     for sheet_name in (COST_SHEET_NAME, DISCOUNT_SHEET_NAME):
         if sheet_name in workbook.sheetnames:
             del workbook[sheet_name]
@@ -168,35 +216,66 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
         discount_sheet.append(row)
 
     if overview_sheet:
+        cost_debito_col = find_header_column(
+            cost_sheet, {COST_HEADER_DEBITO, COST_HEADER_DEBITO_ACCENT}
+        )
+        cost_estabelecimento_col = find_header_column(
+            cost_sheet, {COST_HEADER_ESTABELECIMENTO}
+        )
+        cost_checkout_col = find_header_column(cost_sheet, {COST_HEADER_CHECKOUT})
+
+        checkouts_folha_value = (
+            find_value_cell(overview_sheet, checkout_folha_cell)
+            if checkout_folha_cell
+            else None
+        )
+        checkouts_empresa_value = (
+            find_value_cell(overview_sheet, checkout_empresa_cell)
+            if checkout_empresa_cell
+            else None
+        )
+        custo_empresa_value = (
+            find_value_cell(overview_sheet, custo_empresa_cell)
+            if custo_empresa_cell
+            else None
+        )
+
+        if cost_debito_col and cost_estabelecimento_col and cost_checkout_col:
+            if checkouts_folha_value:
+                checkouts_folha_value.value = (
+                    f"=SUMIFS('Custo empresa'!{cost_debito_col}:{cost_debito_col},"
+                    f"'Custo empresa'!{cost_estabelecimento_col}:{cost_estabelecimento_col},"
+                    f"\"{DISCOUNT_FILTER_VALUE}\","
+                    f"'Custo empresa'!{cost_checkout_col}:{cost_checkout_col},\"<>\")"
+                )
+            if checkouts_empresa_value:
+                checkouts_empresa_value.value = (
+                    f"=SUMIFS('Custo empresa'!{cost_debito_col}:{cost_debito_col},"
+                    f"'Custo empresa'!{cost_estabelecimento_col}:{cost_estabelecimento_col},"
+                    f"\"{COST_FILTER_VALUE}\","
+                    f"'Custo empresa'!{cost_checkout_col}:{cost_checkout_col},\"<>\")"
+                )
+            if custo_empresa_value:
+                custo_empresa_value.value = (
+                    f"=SUMIFS('Custo empresa'!{cost_debito_col}:{cost_debito_col},"
+                    f"'Custo empresa'!{cost_checkout_col}:{cost_checkout_col},\"=\")"
+                )
+
         total_empresa_value = None
         if total_empresa_cell:
             total_empresa_value = find_value_cell(overview_sheet, total_empresa_cell)
-            if (
-                total_empresa_value
-                and checkout_folha_cell
-                and checkout_empresa_cell
-                and custo_empresa_cell
-            ):
-                checkouts_folha_value = find_value_cell(
-                    overview_sheet, checkout_folha_cell
+            company_cells = [
+                value_cell.coordinate
+                for value_cell in (
+                    checkouts_folha_value,
+                    checkouts_empresa_value,
+                    custo_empresa_value,
                 )
-                checkouts_empresa_value = find_value_cell(
-                    overview_sheet, checkout_empresa_cell
-                )
-                custo_empresa_value = find_value_cell(
-                    overview_sheet, custo_empresa_cell
-                )
-                company_cells = [
-                    value_cell.coordinate
-                    for value_cell in (
-                        checkouts_folha_value,
-                        checkouts_empresa_value,
-                        custo_empresa_value,
-                    )
-                    if value_cell
-                ]
-                if company_cells:
-                    total_empresa_value.value = f"=SUM({','.join(company_cells)})"
+                if value_cell
+            ]
+            if total_empresa_value and company_cells:
+                total_empresa_value.value = f"=SUM({','.join(company_cells)})"
+
         total_func_value = None
         if a_debitar_cell:
             value_cell = find_value_cell(overview_sheet, a_debitar_cell)
