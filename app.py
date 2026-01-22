@@ -29,6 +29,7 @@ OVERVIEW_SHEET_NAME = "Overview"
 OVERVIEW_CHECKOUT_PAGAR_LABEL = "Checkouts a pagar"
 OVERVIEW_TAXA_ADMIN_LABEL = "Taxa administrativa"
 OVERVIEW_SUBSIDIOS_LABEL = "Subsídios"
+OVERVIEW_CREDITOS_INSERIDOS_LABEL = "Créditos inseridos"  # Novo label para remoção
 
 # Labels finais desejados
 OVERVIEW_CHECKOUT_FOLHA_LABEL = "Checkouts Folha colab."
@@ -120,21 +121,18 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
     )
 
     # === BLOCO 1 (TOPO): TARIFA SEM DATA DE CHECKOUT ===
-    # Filtro: Apenas TARIFA e SEM data.
     cost_tarifa_no_checkout = detailed[
         (detailed[COLUMN_ESTABELECIMENTO] == COST_FILTER_VALUE)
         & ~checkout_filled
     ]
 
     # === BLOCO 2 (MEIO): TARIFA COM DATA DE CHECKOUT ===
-    # Filtro: Apenas TARIFA e COM data.
     cost_tarifa_checkout = detailed[
         (detailed[COLUMN_ESTABELECIMENTO] == COST_FILTER_VALUE)
         & checkout_filled
     ]
 
     # === BLOCO 3 (FIM): RESGATE COM DATA DE CHECKOUT ===
-    # Filtro: Apenas RESGATE e COM data.
     cost_resgate_checkout = detailed[
         (detailed[COLUMN_ESTABELECIMENTO] == DISCOUNT_FILTER_VALUE)
         & checkout_filled
@@ -147,10 +145,7 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
     title_empresa = title_empresa.reindex(columns=detailed.columns, fill_value="")
     title_folha = title_folha.reindex(columns=detailed.columns, fill_value="")
 
-    # Montagem final conforme imagem enviada: 
-    # 1. Tarifa (sem data) 
-    # 2. Label "Checkouts Empresa" -> Tarifa (com data)
-    # 3. Label "Checkouts Folha colab" -> Resgate (com data)
+    # Montagem final
     cost_frame = pd.concat(
         [
             cost_tarifa_no_checkout, 
@@ -162,14 +157,18 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
         ignore_index=True,
     )
 
-    # Lógica para aba de Desconto Folha
-    # Assume-se que aqui entram os RESGATES que NÃO têm data (já que não entraram no Custo empresa)
+    # Aba Desconto Folha (Resgates sem checkout)
     discount_frame = detailed[
         (detailed[COLUMN_ESTABELECIMENTO] == DISCOUNT_FILTER_VALUE) & ~checkout_filled
     ]
 
     workbook = load_workbook(BytesIO(bytes_data))
     overview_sheet = workbook[OVERVIEW_SHEET_NAME]
+
+    # === ALTERAÇÃO: Remover "Créditos inseridos" ANTES de buscar as outras células ===
+    creditos_cell = find_label_cell(overview_sheet, OVERVIEW_CREDITOS_INSERIDOS_LABEL)
+    if creditos_cell:
+        overview_sheet.delete_rows(creditos_cell.row)
 
     # === Reaproveita linhas base do Overview ===
     checkout_pagar_cell = find_label_cell(overview_sheet, OVERVIEW_CHECKOUT_PAGAR_LABEL)
@@ -224,8 +223,6 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
     if not (v_checkout_folha and v_checkout_empresa and v_custo_empresa):
         raise ValueError("Não foi possível localizar as células de VALOR no Overview.")
 
-    # Fórmulas com VÍRGULA (padrão Openpyxl)
-    
     # 1. Checkout Folha = Soma (RESGATE) Onde (Checkout não é vazio)
     v_checkout_folha.value = (
         f"=SUMIFS('Custo empresa'!{cost_debito_col}:{cost_debito_col},"
@@ -241,7 +238,6 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
     )
 
     # 3. Custo empresa = Soma (TARIFA) Onde (Checkout É vazio)
-    # A fórmula agora soma os valores da parte de cima da tabela (que são apenas TARIFA)
     v_custo_empresa.value = (
         f"=SUMIFS('Custo empresa'!{cost_debito_col}:{cost_debito_col},"
         f"'Custo empresa'!{cost_checkout_col}:{cost_checkout_col},\"=\")"
