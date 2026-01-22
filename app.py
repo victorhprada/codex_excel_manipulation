@@ -67,7 +67,10 @@ def find_header_column(sheet, labels: set[str]) -> str | None:
 
 def copy_row_style(source_row, target_row) -> None:
     for source_cell, target_cell in zip(source_row, target_row):
-        target_cell._style = source_cell._style
+        target_cell.font = source_cell.font
+        target_cell.fill = source_cell.fill
+        target_cell.border = source_cell.border
+        target_cell.alignment = source_cell.alignment
         target_cell.number_format = source_cell.number_format
 
 
@@ -173,35 +176,11 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
             overview_sheet, OVERVIEW_TOTAL_FECHAMENTO_LABEL
         )
 
-        if total_empresa_cell:
-            label_column = total_empresa_cell.column
-            template_row = overview_sheet[total_empresa_cell.row]
-            missing_labels = [
-                OVERVIEW_CHECKOUT_FOLHA_LABEL,
-                OVERVIEW_CHECKOUT_EMPRESA_LABEL,
-                OVERVIEW_CUSTO_EMPRESA_LABEL,
-            ]
-            existing_labels = {
-                normalize_text(cell.value)
-                for cell in (checkout_folha_cell, checkout_empresa_cell, custo_empresa_cell)
-                if cell
-            }
-            insert_row = total_empresa_cell.row
-            for label in reversed(missing_labels):
-                if normalize_text(label) not in existing_labels:
-                    overview_sheet.insert_rows(insert_row)
-                    copy_row_style(template_row, overview_sheet[insert_row])
-                    overview_sheet.cell(row=insert_row, column=label_column).value = label
-            checkout_folha_cell = find_label_cell(
-                overview_sheet, OVERVIEW_CHECKOUT_FOLHA_LABEL
-            )
-            checkout_empresa_cell = find_label_cell(
-                overview_sheet, OVERVIEW_CHECKOUT_EMPRESA_LABEL
-            )
-            custo_empresa_cell = find_label_cell(
-                overview_sheet, OVERVIEW_CUSTO_EMPRESA_LABEL
-            )
-            total_empresa_cell = find_label_cell(overview_sheet, OVERVIEW_TOTAL_LABEL)
+        if checkout_empresa_cell:
+            template_row = overview_sheet[checkout_empresa_cell.row]
+            for label_cell in (checkout_folha_cell, custo_empresa_cell):
+                if label_cell:
+                    copy_row_style(template_row, overview_sheet[label_cell.row])
 
     for sheet_name in (COST_SHEET_NAME, DISCOUNT_SHEET_NAME):
         if sheet_name in workbook.sheetnames:
@@ -274,7 +253,7 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
                 if value_cell
             ]
             if total_empresa_value and company_cells:
-                total_empresa_value.value = f"=SUM({','.join(company_cells)})"
+                total_empresa_value.value = f"=SUM({';'.join(company_cells)})"
 
         total_func_value = None
         if a_debitar_cell:
@@ -288,13 +267,13 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
                 if a_debitar_value:
                     total_func_value.value = f"={a_debitar_value.coordinate}"
         if total_fechamento_cell and total_empresa_value and total_func_value:
-            total_fechamento_value = find_value_cell(
-                overview_sheet, total_fechamento_cell
+            total_fechamento_value = overview_sheet.cell(
+                row=total_fechamento_cell.row + 1,
+                column=total_fechamento_cell.column,
             )
-            if total_fechamento_value:
-                total_fechamento_value.value = (
-                    f"={total_empresa_value.coordinate}+{total_func_value.coordinate}"
-                )
+            total_fechamento_value.value = (
+                f"={total_empresa_value.coordinate}+{total_func_value.coordinate}"
+            )
 
     output_buffer = BytesIO()
     workbook.save(output_buffer)
