@@ -119,20 +119,22 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
         & detailed[CHECKOUT_COLUMN].astype(str).str.strip().ne("")
     )
 
-    # === BLOCO 1: RESGATE... SEM DATA NO CHECKOUT ===
-    cost_resgate_no_checkout = detailed[
-        (detailed[COLUMN_ESTABELECIMENTO] == DISCOUNT_FILTER_VALUE)
+    # === BLOCO 1 (TOPO): TARIFA SEM DATA DE CHECKOUT ===
+    # Filtro: Apenas TARIFA e SEM data.
+    cost_tarifa_no_checkout = detailed[
+        (detailed[COLUMN_ESTABELECIMENTO] == COST_FILTER_VALUE)
         & ~checkout_filled
     ]
 
-    # === BLOCO 2: TARIFA... COM DATA NO CHECKOUT ===
-    # (Solicitação: Checkouts Empresa deve conter TARIFA apenas se tiver data)
+    # === BLOCO 2 (MEIO): TARIFA COM DATA DE CHECKOUT ===
+    # Filtro: Apenas TARIFA e COM data.
     cost_tarifa_checkout = detailed[
         (detailed[COLUMN_ESTABELECIMENTO] == COST_FILTER_VALUE)
         & checkout_filled
     ]
 
-    # === BLOCO 3: RESGATE... COM DATA NO CHECKOUT ===
+    # === BLOCO 3 (FIM): RESGATE COM DATA DE CHECKOUT ===
+    # Filtro: Apenas RESGATE e COM data.
     cost_resgate_checkout = detailed[
         (detailed[COLUMN_ESTABELECIMENTO] == DISCOUNT_FILTER_VALUE)
         & checkout_filled
@@ -145,13 +147,13 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
     title_empresa = title_empresa.reindex(columns=detailed.columns, fill_value="")
     title_folha = title_folha.reindex(columns=detailed.columns, fill_value="")
 
-    # Montagem final: 
-    # 1. Resgate (vazio) 
-    # 2. Label Empresa -> Tarifa (preenchido)
-    # 3. Label Folha -> Resgate (preenchido)
+    # Montagem final conforme imagem enviada: 
+    # 1. Tarifa (sem data) 
+    # 2. Label "Checkouts Empresa" -> Tarifa (com data)
+    # 3. Label "Checkouts Folha colab" -> Resgate (com data)
     cost_frame = pd.concat(
         [
-            cost_resgate_no_checkout, 
+            cost_tarifa_no_checkout, 
             title_empresa, 
             cost_tarifa_checkout, 
             title_folha, 
@@ -160,8 +162,8 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
         ignore_index=True,
     )
 
-    # Lógica para aba de Desconto (Geralmente são os Resgates sem checkout, ou todos os Resgates)
-    # Mantendo lógica padrão de Resgates sem checkout, se precisar ajustar avise.
+    # Lógica para aba de Desconto Folha
+    # Assume-se que aqui entram os RESGATES que NÃO têm data (já que não entraram no Custo empresa)
     discount_frame = detailed[
         (detailed[COLUMN_ESTABELECIMENTO] == DISCOUNT_FILTER_VALUE) & ~checkout_filled
     ]
@@ -224,23 +226,22 @@ def process_excel(uploaded_file: BytesIO) -> BytesIO:
 
     # Fórmulas com VÍRGULA (padrão Openpyxl)
     
-    # 1. Checkout Folha = Soma (Resgate) Onde (Checkout não é vazio)
+    # 1. Checkout Folha = Soma (RESGATE) Onde (Checkout não é vazio)
     v_checkout_folha.value = (
         f"=SUMIFS('Custo empresa'!{cost_debito_col}:{cost_debito_col},"
         f"'Custo empresa'!{cost_est_col}:{cost_est_col},\"{DISCOUNT_FILTER_VALUE}\","
         f"'Custo empresa'!{cost_checkout_col}:{cost_checkout_col},\"<>\")"
     )
 
-    # 2. Checkout Empresa = Soma (Tarifa) Onde (Checkout não é vazio)
-    # Como agora incluímos os registros de Tarifa na aba 'Custo empresa', essa fórmula volta a funcionar corretamente
+    # 2. Checkout Empresa = Soma (TARIFA) Onde (Checkout não é vazio)
     v_checkout_empresa.value = (
         f"=SUMIFS('Custo empresa'!{cost_debito_col}:{cost_debito_col},"
         f"'Custo empresa'!{cost_est_col}:{cost_est_col},\"{COST_FILTER_VALUE}\","
         f"'Custo empresa'!{cost_checkout_col}:{cost_checkout_col},\"<>\")"
     )
 
-    # 3. Custo empresa = Soma (Geralmente Resgate sem checkout, ou filtrado por lógica específica)
-    # Aqui ajustei para somar onde o checkout é "Vazio" (=), assumindo que são os Resgates do Bloco 1
+    # 3. Custo empresa = Soma (TARIFA) Onde (Checkout É vazio)
+    # A fórmula agora soma os valores da parte de cima da tabela (que são apenas TARIFA)
     v_custo_empresa.value = (
         f"=SUMIFS('Custo empresa'!{cost_debito_col}:{cost_debito_col},"
         f"'Custo empresa'!{cost_checkout_col}:{cost_checkout_col},\"=\")"
