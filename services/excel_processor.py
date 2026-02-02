@@ -176,8 +176,8 @@ def process_excel(file_bytes: bytes) -> BytesIO:
     title_empresa = pd.DataFrame([{detailed.columns[0]: "Checkouts Empresa"}])
     title_folha = pd.DataFrame([{detailed.columns[0]: "Checkouts Folha colab"}])
 
-    title_empresa = title_empresa.reindex(columns=detailed.columns, fill_value="")
-    title_folha = title_folha.reindex(columns=detailed.columns, fill_value="")
+    title_empresa = title_empresa.reindex(columns=detailed.columns).fillna("")
+    title_folha = title_folha.reindex(columns=detailed.columns).fillna("")
 
     # Montagem final
     cost_frame = pd.concat(
