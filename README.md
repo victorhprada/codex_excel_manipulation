@@ -1,10 +1,10 @@
-# 🚀 Financial Operations ETL: From Product Pain to Data Automation
+# 🚀 Financial Operations ETL: REST API para Automação de Dados
 
-> Um pipeline de automação de dados "End-to-End" desenvolvido para eliminar gargalos no backoffice financeiro, reduzindo o tempo de fechamento de 30 minutos para 5 segundos.
+> Um pipeline de automação de dados "End-to-End" desenvolvido para eliminar gargalos no backoffice financeiro, reduzindo o tempo de fechamento de 30 minutos para 5 segundos. Agora disponível como API REST para integração com qualquer frontend.
 
 ![Badge Python](https://img.shields.io/badge/Tech-Python_3.9-blue)
 ![Badge Pandas](https://img.shields.io/badge/Data-Pandas-150458)
-![Badge Streamlit](https://img.shields.io/badge/App-Streamlit-red)
+![Badge FastAPI](https://img.shields.io/badge/API-FastAPI-009688)
 ![Badge Openpyxl](https://img.shields.io/badge/Engine-Openpyxl-green)
 ![Badge Governance](https://img.shields.io/badge/Compliance-Data_Privacy-lightgrey)
 
@@ -17,8 +17,8 @@ Atuando na interface entre Produto e Operações, identifiquei um padrão críti
 
 **O Desafio:** Como automatizar regras de negócio híbridas garantindo 100% de precisão contábil e auditoria, sem exigir conhecimentos de programação do usuário final?
 
-## 💡 A Solução: Abordagem Data-Driven
-Desenvolvi uma aplicação web **Full-Stack** (Python + Streamlit) que atua como um middleware de processamento. A ferramenta ingere os dados brutos, aplica a lógica de negócios em memória e devolve o dataset estruturado e formatado.
+## 💡 A Solução: API REST + Arquitetura Desacoplada
+Desenvolvi uma **API REST** (FastAPI + Python) que atua como um middleware de processamento. A API ingere os dados brutos via HTTP, aplica a lógica de negócios em memória e devolve o dataset estruturado e formatado, permitindo integração com qualquer frontend (React, Vue, Angular, mobile apps).
 
 ### Arquitetura do Pipeline de Dados
 *Devido a políticas de compliance e privacidade de dados, a arquitetura lógica abaixo substitui screenshots de planilhas reais.*
@@ -47,7 +47,8 @@ Este projeto demonstra a aplicação prática de conceitos de Ciência de Dados 
 * **ETL & Wrangling (Pandas):** Limpeza de dados, tratamento de valores nulos e categorização baseada em múltiplas condições.
 * **Processamento em Memória (`io.BytesIO`):** Manipulação de arquivos sem gravação em disco, garantindo segurança e performance.
 * **Automação de Excel (`openpyxl`):** Ao contrário de scripts simples que apenas exportam valores, este projeto manipula o XML do Excel para preservar estilos e injetar fórmulas dinâmicas (`=SUMIFS(...)`), permitindo auditoria pelo time financeiro.
-* **Frontend Interativo (`Streamlit`):** Democratização do acesso aos scripts de dados através de uma interface web amigável ("No-Code" para o usuário final).
+* **API REST (FastAPI):** Arquitetura moderna com documentação automática (OpenAPI/Swagger), validação de tipos com Pydantic e suporte a async/await.
+* **Separação de Responsabilidades:** Lógica de negócio isolada em camada de serviço, permitindo testes unitários e manutenção facilitada.
 
 ## 💻 Destaque Técnico: Lógica Híbrida
 
@@ -86,26 +87,91 @@ def process_excel(uploaded_file):
 * **Qualidade de Dados:** Eliminação virtual de erros humanos na consolidação das abas "Custo Empresa" e "Desconto Folha".
 * **Experiência do Usuário (UX):** Feedback visual imediato de sucesso/erro implementado na interface.
 
-## 🚀 Como Executar Localmente
+## 🚀 Como Executar a API Localmente
 
-1. Clone o repositório:
+### 1. Clone o repositório e instale as dependências
+
 ```bash
-git clone [https://github.com/seu-usuario/financial-automation-etl.git](https://github.com/seu-usuario/financial-automation-etl.git)
-
+git clone https://github.com/seu-usuario/financial-automation-etl.git
+cd financial-automation-etl
+pip install -r requirements.txt
 ```
 
+### 2. Inicie o servidor FastAPI
 
-2. Instale as dependências:
 ```bash
-pip install pandas openpyxl streamlit
-
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+Ou simplesmente:
 
-3. Execute a aplicação:
 ```bash
-streamlit run app.py
+python main.py
+```
 
+### 3. Acesse a documentação interativa
+
+- **Swagger UI:** http://localhost:8000/docs
+- **ReDoc:** http://localhost:8000/redoc
+- **Health Check:** http://localhost:8000/health
+
+## 📡 Endpoints da API
+
+### POST `/process`
+Processa um arquivo Excel aplicando as regras de negócio.
+
+**Request:**
+```bash
+curl -X POST "http://localhost:8000/process" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@seu_arquivo.xlsx" \
+  --output processado.xlsx
+```
+
+**Exemplo em JavaScript (Fetch):**
+```javascript
+const formData = new FormData();
+formData.append('file', fileInput.files[0]);
+
+const response = await fetch('http://localhost:8000/process', {
+  method: 'POST',
+  body: formData
+});
+
+const blob = await response.blob();
+const url = window.URL.createObjectURL(blob);
+const a = document.createElement('a');
+a.href = url;
+a.download = 'processado.xlsx';
+a.click();
+```
+
+**Response:**
+- **200:** Retorna o arquivo Excel processado para download
+- **400:** Formato de arquivo inválido ou erro de validação
+- **500:** Erro interno de processamento
+
+### GET `/health`
+Verifica o status da API.
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "service": "excel-processing-api"
+}
+```
+
+## 🏗️ Arquitetura do Projeto
+
+```
+codex_excel_manipulation/
+├── main.py                    # FastAPI app com endpoints REST
+├── services/
+│   └── excel_processor.py     # Lógica de negócio isolada
+├── app.py                     # Versão Streamlit (legado)
+├── requirements.txt           # Dependências Python
+└── README.md
 ```
 
 
