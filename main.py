@@ -2,12 +2,16 @@
 FastAPI REST API para Processamento de Excel
 Expõe endpoints para manipulação de arquivos Excel através de HTTP.
 """
+import os
 import logging
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from services.excel_processor import process_excel
+
+# Configuração de segurança
+API_KEY = os.getenv('API_KEY')
 
 # Configuração de logging
 logging.basicConfig(
@@ -31,6 +35,41 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# =====================
+# Dependências de Segurança
+# =====================
+async def verify_api_key(x_api_key: str = Header(None)):
+    """
+    Verifica se a API Key fornecida no header x-api-key é válida.
+    
+    Args:
+        x_api_key: Valor do header x-api-key da requisição
+        
+    Raises:
+        HTTPException 401: Se a chave não for fornecida ou for inválida
+    """
+    if not API_KEY:
+        logger.warning("API_KEY não configurada no ambiente. Endpoint desprotegido!")
+        return  # Se não há API_KEY configurada, permite acesso (desenvolvimento)
+    
+    if not x_api_key:
+        logger.warning("Tentativa de acesso sem API Key")
+        raise HTTPException(
+            status_code=401,
+            detail="API Key não fornecida. Inclua o header 'x-api-key' na requisição."
+        )
+    
+    if x_api_key != API_KEY:
+        logger.warning(f"Tentativa de acesso com API Key inválida: {x_api_key[:8]}...")
+        raise HTTPException(
+            status_code=401,
+            detail="API Key inválida"
+        )
+    
+    logger.debug("API Key validada com sucesso")
+    return x_api_key
 
 
 @app.get("/")
@@ -61,17 +100,22 @@ async def health_check():
 
 
 @app.post("/process")
-async def process_file(file: UploadFile = File(...)):
+async def process_file(
+    file: UploadFile = File(...),
+    api_key: str = Depends(verify_api_key)
+):
     """
     Processa um arquivo Excel aplicando regras de negócio.
     
     Args:
         file: Arquivo Excel (.xlsx) para processamento
+        api_key: API Key validada (via dependency injection)
         
     Returns:
         StreamingResponse com o arquivo processado para download
         
     Raises:
+        HTTPException 401: Se a API Key não for fornecida ou for inválida
         HTTPException 400: Se o formato do arquivo não for .xlsx
         HTTPException 500: Se ocorrer erro durante o processamento
     """
@@ -101,7 +145,7 @@ async def process_file(file: UploadFile = File(...)):
             output,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={
-                "Content-Disposition": f"attachment; filename={output_filename}"
+                "Content-Disposition": f'attachment; filename="{output_filename}"'
             }
         )
         
