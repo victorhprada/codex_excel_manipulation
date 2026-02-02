@@ -1,182 +1,102 @@
-# 🚀 Financial Operations ETL: REST API para Automação de Dados
+# Codex Excel Manipulation 🚀
 
-> Um pipeline de automação de dados "End-to-End" desenvolvido para eliminar gargalos no backoffice financeiro, reduzindo o tempo de fechamento de 30 minutos para 5 segundos. Agora disponível como API REST para integração com qualquer frontend.
+Aplicação moderna para processamento e manipulação automatizada de planilhas Excel. Originalmente desenvolvida em Streamlit, este projeto foi migrado para uma arquitetura desacoplada (Headless), utilizando **FastAPI** no backend para alta performance e **Lovable (React)** para uma interface frontend moderna e responsiva.
 
-![Badge Python](https://img.shields.io/badge/Tech-Python_3.9-blue)
-![Badge Pandas](https://img.shields.io/badge/Data-Pandas-150458)
-![Badge FastAPI](https://img.shields.io/badge/API-FastAPI-009688)
-![Badge Openpyxl](https://img.shields.io/badge/Engine-Openpyxl-green)
-![Badge Governance](https://img.shields.io/badge/Compliance-Data_Privacy-lightgrey)
+## 🏗️ Arquitetura do Sistema
 
-## 💼 Contexto: A Visão de Produto & O Problema
-Atuando na interface entre Produto e Operações, identifiquei um padrão crítico de ineficiência no processo de faturamento mensal de custos corporativos. O time financeiro realizava um processo manual de **Extração, Transformação e Carga (ETL)** via Excel que apresentava três dores principais:
-
-1.  **Alta Latência:** O processo consumia horas críticas durante o período de fechamento (SLA).
-2.  **Risco Operacional:** A manipulação manual de milhares de linhas era propensa a erros de cópia e quebra de referências.
-3.  **Falta de Padronização:** Dificuldade em manter regras de negócio complexas (segregação de tarifas vs. resgates) de forma consistente.
-
-**O Desafio:** Como automatizar regras de negócio híbridas garantindo 100% de precisão contábil e auditoria, sem exigir conhecimentos de programação do usuário final?
-
-## 💡 A Solução: API REST + Arquitetura Desacoplada
-Desenvolvi uma **API REST** (FastAPI + Python) que atua como um middleware de processamento. A API ingere os dados brutos via HTTP, aplica a lógica de negócios em memória e devolve o dataset estruturado e formatado, permitindo integração com qualquer frontend (React, Vue, Angular, mobile apps).
-
-### Arquitetura do Pipeline de Dados
-*Devido a políticas de compliance e privacidade de dados, a arquitetura lógica abaixo substitui screenshots de planilhas reais.*
+O sistema opera em duas camadas distintas, comunicando-se via API REST segura.
 
 ```mermaid
-graph TD
-    A[Input: Relatório Bruto .xlsx] -->|Upload via Streamlit| B(Ingestão em Memória / BytesIO)
-    B --> C{Pandas: Data Cleaning}
-    C -->|Normalização Unicode| D[Padronização de Strings]
-    C -->|Filtragem Booleana| E[Aplicação de Regras de Negócio]
+graph LR
+    User([👤 Usuário]) -->|Drag & Drop| UI[💻 Frontend Lovable/React]
+    UI -->|POST /process + API Key| API[⚙️ Backend FastAPI/Render]
     
-    E --> F[Regra 1: Tarifas SEM data de Checkout]
-    E --> G[Regra 2: Tarifas COM data de Checkout]
-    E --> H[Regra 3: Resgates COM data de Checkout]
+    subgraph Cloud Server
+        API -->|Validação| Service[🧠 Excel Service Pandas]
+        Service -->|Processamento| Logic(Regras de Negócio)
+        Logic -->|Gera BytesIO| Service
+    end
     
-    F & G & H --> I[Montagem do DataFrame Final]
-    I -->|Engine Openpyxl| J[Injeção de Fórmulas SUMIFS]
-    J -->|Download| K[Output: Relatório Auditável]
-
+    Service -->|Retorna Blob| API
+    API -->|Download Automático| UI
+    UI -->|Arquivo: processado_nome_original.xlsx| User
 ```
 
-## 🛠️ Tecnologias e Engenharia de Dados
+## 🛠️ Tech Stack
 
-Este projeto demonstra a aplicação prática de conceitos de Ciência de Dados para resolver dores de negócio:
+### Backend (API)
 
-* **ETL & Wrangling (Pandas):** Limpeza de dados, tratamento de valores nulos e categorização baseada em múltiplas condições.
-* **Processamento em Memória (`io.BytesIO`):** Manipulação de arquivos sem gravação em disco, garantindo segurança e performance.
-* **Automação de Excel (`openpyxl`):** Ao contrário de scripts simples que apenas exportam valores, este projeto manipula o XML do Excel para preservar estilos e injetar fórmulas dinâmicas (`=SUMIFS(...)`), permitindo auditoria pelo time financeiro.
-* **API REST (FastAPI):** Arquitetura moderna com documentação automática (OpenAPI/Swagger), validação de tipos com Pydantic e suporte a async/await.
-* **Separação de Responsabilidades:** Lógica de negócio isolada em camada de serviço, permitindo testes unitários e manutenção facilitada.
+* **Language:** Python 3.10+
+* **Framework:** FastAPI
+* **Data Processing:** Pandas, OpenPyXL, XlsxWriter
+* **Security:** API Key Authentication (Header `x-api-key`)
+* **Deploy:** Render
 
-## 💻 Destaque Técnico: Lógica Híbrida
+### Frontend (Interface)
 
-O maior desafio técnico foi implementar uma segregação onde o destino do dado depende não apenas do seu tipo ("Estabelecimento"), mas também de metadados temporais ("Checkout").
+* **Platform:** Lovable
+* **Framework:** React + TypeScript
+* **Styling:** Tailwind CSS + Shadcn UI
+* **Integration:** Fetch API com suporte a Blobs binários
 
-```python
-# Snippet da lógica de segregação implementada no backend
-def process_excel(uploaded_file):
-    # ... (ingestão e limpeza)
-    
-    # Máscara Booleana vetorizada para identificar registros com data
-    checkout_filled = (
-        detailed[CHECKOUT_COLUMN].notna()
-        & detailed[CHECKOUT_COLUMN].astype(str).str.strip().ne("")
-    )
+## 🚀 Como Rodar Localmente (Backend)
 
-    # Lógica de Negócio: Tarifas "Órfãs" (Sem data) vão para o topo
-    cost_tarifa_no_checkout = detailed[
-        (detailed[COLUMN_ESTABELECIMENTO] == COST_FILTER_VALUE)
-        & ~checkout_filled
-    ]
-
-    # Lógica de Negócio: Tarifas Processadas (Com data) vão para bloco secundário
-    cost_tarifa_checkout = detailed[
-        (detailed[COLUMN_ESTABELECIMENTO] == COST_FILTER_VALUE)
-        & checkout_filled
-    ]
-    
-    # ... (concatenação lógica e renderização)
-
-```
-
-## 📈 Impacto Mensurável (KPIs)
-
-* **Eficiência Temporal:** Redução do tempo de execução de **~30 minutos para 5 segundos** (Redução de 99%).
-* **Qualidade de Dados:** Eliminação virtual de erros humanos na consolidação das abas "Custo Empresa" e "Desconto Folha".
-* **Experiência do Usuário (UX):** Feedback visual imediato de sucesso/erro implementado na interface.
-
-## 🚀 Como Executar a API Localmente
-
-### 1. Clone o repositório e instale as dependências
+1. **Clone o repositório**
 
 ```bash
-git clone https://github.com/seu-usuario/financial-automation-etl.git
-cd financial-automation-etl
+git clone https://github.com/victorhprada/codex_excel_manipulation.git
+cd codex_excel_manipulation
+```
+
+2. **Instale as dependências**
+
+```bash
 pip install -r requirements.txt
 ```
 
-### 2. Inicie o servidor FastAPI
+3. **Configure a Variável de Ambiente**
+
+Crie um arquivo `.env` na raiz do projeto (copie de `.env.example`) ou exporte no terminal:
 
 ```bash
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+export API_KEY="sua_chave_secreta_aqui"
 ```
 
-Ou simplesmente:
+No Windows (PowerShell):
+
+```powershell
+$env:API_KEY="sua_chave_secreta_aqui"
+```
+
+4. **Inicie o Servidor**
 
 ```bash
-python main.py
+uvicorn main:app --reload
 ```
 
-### 3. Acesse a documentação interativa
+A documentação interativa (Swagger) estará disponível em: **http://localhost:8000/docs**
 
-- **Swagger UI:** http://localhost:8000/docs
-- **ReDoc:** http://localhost:8000/redoc
-- **Health Check:** http://localhost:8000/health
+## 🔐 API Endpoints
 
-## 📡 Endpoints da API
+### `POST /process`
 
-### POST `/process`
-Processa um arquivo Excel aplicando as regras de negócio.
+Processa o arquivo Excel enviado e retorna a versão modificada.
 
-**Request:**
-```bash
-curl -X POST "http://localhost:8000/process" \
-  -H "Content-Type: multipart/form-data" \
-  -F "file=@seu_arquivo.xlsx" \
-  --output processado.xlsx
-```
+* **Header:** `x-api-key: <SUA_CHAVE>`
+* **Body (form-data):** `file: <arquivo.xlsx>`
+* **Response:** Arquivo binário (`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`)
 
-**Exemplo em JavaScript (Fetch):**
-```javascript
-const formData = new FormData();
-formData.append('file', fileInput.files[0]);
+### `GET /health`
 
-const response = await fetch('http://localhost:8000/process', {
-  method: 'POST',
-  body: formData
-});
+Verifica se a API está online.
 
-const blob = await response.blob();
-const url = window.URL.createObjectURL(blob);
-const a = document.createElement('a');
-a.href = url;
-a.download = 'processado.xlsx';
-a.click();
-```
-
-**Response:**
-- **200:** Retorna o arquivo Excel processado para download
-- **400:** Formato de arquivo inválido ou erro de validação
-- **500:** Erro interno de processamento
-
-### GET `/health`
-Verifica o status da API.
-
-**Response:**
-```json
-{
-  "status": "healthy",
-  "service": "excel-processing-api"
-}
-```
-
-## 🏗️ Arquitetura do Projeto
+## 📄 Estrutura do Projeto
 
 ```
-codex_excel_manipulation/
-├── main.py                    # FastAPI app com endpoints REST
+├── main.py                  # Entry point da API (Rotas e Auth)
 ├── services/
-│   └── excel_processor.py     # Lógica de negócio isolada
-├── app.py                     # Versão Streamlit (legado)
-├── requirements.txt           # Dependências Python
-└── README.md
+│   └── excel_processor.py   # Lógica pura de manipulação (Pandas)
+├── requirements.txt         # Dependências do Python
+├── .env.example             # Exemplo de variáveis de ambiente
+└── README.md                # Documentação
 ```
-
-
-
----
-
-*Desenvolvido por **Victor Prada**.*
-*Conectando visão de Produto com Engenharia de Dados.*
